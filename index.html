@@ -41,7 +41,7 @@ dialog label{display:block;margin:8px 0 2px;font-size:12px;color:var(--mut)}dial
     const V='10.12.2',B='https://www.gstatic.com/firebasejs/'+V+'/';
     const [A,F,U]=await Promise.all([import(B+'firebase-app.js'),import(B+'firebase-firestore.js'),import(B+'firebase-auth.js')]);
     const app=A.initializeApp({apiKey:"AIzaSyDgvUq6uNbGJCaQH9rg6jSNE4PtVkAmxpA",authDomain:"pca-ff.firebaseapp.com",projectId:"pca-ff",storageBucket:"pca-ff.firebasestorage.app",messagingSenderId:"654289439934",appId:"1:654289439934:web:dcf27780d0757595da22ef"});
-    const db=F.getFirestore(app),au=U.getAuth(app);
+    const db=F.initializeFirestore(app,{experimentalForceLongPolling:true}),au=U.getAuth(app);
     const clean=o=>JSON.parse(JSON.stringify(o));
     const iso=v=>v&&v.toDate?v.toDate().toISOString():(v||'');
     window.FB={
