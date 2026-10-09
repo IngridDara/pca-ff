@@ -289,7 +289,16 @@ const Store={
     this.unsub.push(this.fb.watch('propostas',l=>{this.data.propostas=l.map(x=>({...x,prop:{nome:x.nome,setor:x.setor,email:x.email}}));this.sync();draw();},falha));
     this.unsub.push(this.fb.watch('auditoria',l=>{this.data.auditoria=l;this.sync();draw();},falha));
   },
-  async login(){try{await this.fb.login();}catch(e){if(e.code!=='auth/popup-closed-by-user'&&e.code!=='auth/cancelled-popup-request'){S.msg='Não consegui entrar: '+(e.code||e.message);draw();}}},
+  async login(){
+    S.msg='Abrindo a janela de login do Google… (se nada abrir, libere pop-ups para este site)';draw();window.scrollTo(0,0);
+    try{await this.fb.login();S.msg='';}
+    catch(e){const c=e.code||'';
+      S.msg=c==='auth/popup-blocked'?'O navegador bloqueou a janela de login. Libere pop-ups para este site (ícone na barra de endereço) e tente de novo.'
+        :c==='auth/unauthorized-domain'?'Domínio não autorizado no Firebase: adicione fundacao-florestal.github.io em Authentication → Configurações → Domínios autorizados.'
+        :(c==='auth/popup-closed-by-user'||c==='auth/cancelled-popup-request')?'Login cancelado.'
+        :'Não consegui entrar: '+(c||e.message);
+      draw();window.scrollTo(0,0);}
+  },
   async logout(){try{await this.fb.logout();S.msg='Você saiu.';}catch(e){}},
   async load(){
     let j={};
