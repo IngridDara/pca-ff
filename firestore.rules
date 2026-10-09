@@ -2,17 +2,42 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Validador = e-mail Google verificado que tenha um documento em /validadores/{e-mail}.
-    // Esses documentos só podem ser criados pelo Console do Firebase (nunca pelo painel).
+    // Administradora: documento /admins/{uid} criado só pelo Console do Firebase.
+    function admin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+    // Validador: documento /validadores/{uid}, criado quando a administradora aprova o cadastro.
     function validador() {
       return request.auth != null
-        && request.auth.token.email_verified == true
-        && exists(/databases/$(database)/documents/validadores/$(request.auth.token.email));
+        && (admin() || exists(/databases/$(database)/documents/validadores/$(request.auth.uid)));
     }
 
-    match /validadores/{email} {
-      allow read: if request.auth != null && request.auth.token.email == email;
+    match /admins/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
       allow write: if false;
+    }
+
+    match /validadores/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create, update, delete: if admin();
+    }
+
+    // Pedidos de cadastro (e-mail e senha): a pessoa cria o próprio pedido como "pendente";
+    // só a administradora lê todos e decide.
+    match /usuarios/{uid} {
+      allow read: if admin() || (request.auth != null && request.auth.uid == uid);
+      allow create: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['nome','setor','email','status','criadoEm'])
+        && request.resource.data.status == 'pendente'
+        && request.resource.data.criadoEm == request.time
+        && request.resource.data.nome is string && request.resource.data.nome.size() >= 3 && request.resource.data.nome.size() <= 120
+        && request.resource.data.setor is string && request.resource.data.setor.size() >= 1 && request.resource.data.setor.size() <= 120
+        && request.resource.data.email is string && request.resource.data.email.size() <= 200;
+      allow update: if admin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','por','decididoEm'])
+        && request.resource.data.status in ['aprovado','recusado','revogado'];
+      allow delete: if false;
     }
 
     // Propostas: qualquer pessoa envia (sem login); só a coordenação lê e decide.

@@ -44,17 +44,29 @@ dialog label{display:block;margin:8px 0 2px;font-size:12px;color:var(--mut)}dial
     const db=F.initializeFirestore(app,{experimentalForceLongPolling:true}),au=U.getAuth(app);
     const clean=o=>JSON.parse(JSON.stringify(o));
     const iso=v=>v&&v.toDate?v.toDate().toISOString():(v||'');
+    const uref=(c,id)=>F.doc(db,c,id);
     window.FB={
       onAuth:cb=>U.onAuthStateChanged(au,cb),
-      login:()=>U.signInWithPopup(au,new U.GoogleAuthProvider()),
+      login:(e,s)=>U.signInWithEmailAndPassword(au,e,s),
+      async cadastrar(nome,setor,email,senha){
+        const c=await U.createUserWithEmailAndPassword(au,email,senha);
+        await F.setDoc(uref('usuarios',c.user.uid),{nome,setor,email,status:'pendente',criadoEm:F.serverTimestamp()});return c.user;},
+      reset:e=>U.sendPasswordResetEmail(au,e),
       logout:()=>U.signOut(au),
-      async isValidador(email){const d=await F.getDoc(F.doc(db,'validadores',email));return d.exists();},
+      async papel(uid){
+        const [a,v,u]=await Promise.all([F.getDoc(uref('admins',uid)),F.getDoc(uref('validadores',uid)),F.getDoc(uref('usuarios',uid))]);
+        return {admin:a.exists(),validador:a.exists()||v.exists(),status:u.exists()?u.data().status:'',nome:u.exists()?u.data().nome:''};},
+      async decidirUsuario(u,dec,por){
+        const b=F.writeBatch(db),at=new Date().toISOString();
+        if(dec==='aprovado')b.set(uref('validadores',u.id),clean({nome:u.nome,setor:u.setor,email:u.email,por,at}));
+        else b.delete(uref('validadores',u.id));
+        b.update(uref('usuarios',u.id),{status:dec,por,decididoEm:at});await b.commit();},
       async listDecisoes(){const r=await F.getDocs(F.collection(db,'decisoes'));return r.docs.map(d=>d.data());},
       setDecisao:(id,o)=>F.setDoc(F.doc(db,'decisoes',id),clean(o)),
       addAudit:o=>F.addDoc(F.collection(db,'auditoria'),clean(o)),
       async enviar(lote,itens){const b=F.writeBatch(db);itens.forEach(it=>b.set(F.doc(F.collection(db,'propostas')),{...clean(it),lote,status:'pendente',criadoEm:F.serverTimestamp()}));await b.commit();},
       updProp:(id,patch)=>F.updateDoc(F.doc(db,'propostas',id),clean(patch)),
-      watch(nome,cb,err){return F.onSnapshot(F.query(F.collection(db,nome),F.orderBy(nome==='propostas'?'criadoEm':'at')),
+      watch(nome,cb,err){return F.onSnapshot(F.query(F.collection(db,nome),F.orderBy(nome==='auditoria'?'at':'criadoEm')),
         snap=>cb(snap.docs.map(d=>{const x=d.data();return {id:d.id,...x,at:iso(x.criadoEm||x.at)};})),err);}
     };
   }catch(e){console.error('Firebase indisponível',e);window.FB=null;}
@@ -271,15 +283,19 @@ const Store={
   data:{ajustes:{},ov:{},destino:{},vinc:{},auditoria:[],propostas:[]},
   get canWrite(){return !!(this.me&&this.me.validador);},
   sync(){const D=this.data;S.aj=D.ajustes;S.ov=D.ov;S.dest=D.destino;S.vinc=D.vinc;S.aud=D.auditoria;S.prop=D.propostas;},
+  async papel(u){
+    let r={admin:false,validador:false,status:'',nome:''};try{r=await this.fb.papel(u.uid);}catch(e){}
+    this.me={uid:u.uid,email:u.email,name:r.nome||u.email,validador:r.validador,admin:r.admin,status:r.status};
+    this.unsub.forEach(f=>f&&f());this.unsub=[];this.data.auditoria=[];this.data.propostas=[];this.usuarios=[];
+    if(r.validador)this.assistir();
+  },
   async entrar(){
     this.fb=await FBP;
     if(!this.fb){S.msg='Sem conexão com o servidor de registros: o painel funciona só para consulta.';return;}
     await new Promise(res=>{let primeira=true;
       this.fb.onAuth(async u=>{
-        this.me=null;this.unsub.forEach(f=>f&&f());this.unsub=[];this.data.auditoria=[];this.data.propostas=[];
-        if(u){let v=false;try{v=await this.fb.isValidador(u.email);}catch(e){}
-          this.me={email:u.email,name:u.displayName||u.email,validador:v};
-          if(v)this.assistir();else S.msg='A conta '+u.email+' não está cadastrada como validadora. Peça à coordenação do NGI para incluí-la.';}
+        this.me=null;this.unsub.forEach(f=>f&&f());this.unsub=[];this.data.auditoria=[];this.data.propostas=[];this.usuarios=[];
+        if(u&&!this.cadastrando)await this.papel(u);
         this.sync();if(!primeira){await this.load();draw();}
         if(primeira){primeira=false;res();}
       });});
@@ -288,17 +304,34 @@ const Store={
     const falha=e=>{S.msg='Sem permissão para ler os registros ('+(e.code||e.message)+').';draw();};
     this.unsub.push(this.fb.watch('propostas',l=>{this.data.propostas=l.map(x=>({...x,prop:{nome:x.nome,setor:x.setor,email:x.email}}));this.sync();draw();},falha));
     this.unsub.push(this.fb.watch('auditoria',l=>{this.data.auditoria=l;this.sync();draw();},falha));
+    if(this.me.admin)this.unsub.push(this.fb.watch('usuarios',l=>{this.usuarios=l;draw();},falha));
   },
-  async login(){
-    S.msg='Abrindo a janela de login do Google… (se nada abrir, libere pop-ups para este site)';draw();window.scrollTo(0,0);
-    try{await this.fb.login();S.msg='';}
-    catch(e){const c=e.code||'';
-      S.msg=c==='auth/popup-blocked'?'O navegador bloqueou a janela de login. Libere pop-ups para este site (ícone na barra de endereço) e tente de novo.'
-        :c==='auth/unauthorized-domain'?'Domínio não autorizado no Firebase: adicione fundacao-florestal.github.io em Authentication → Configurações → Domínios autorizados.'
-        :(c==='auth/popup-closed-by-user'||c==='auth/cancelled-popup-request')?'Login cancelado.'
-        :'Não consegui entrar: '+(c||e.message);
-      draw();window.scrollTo(0,0);}
+  erroAuth(e){const c=e.code||'';
+    return ({'auth/invalid-credential':'E-mail ou senha incorretos.','auth/wrong-password':'E-mail ou senha incorretos.','auth/user-not-found':'E-mail ou senha incorretos.','auth/invalid-email':'E-mail inválido.',
+      'auth/email-already-in-use':'Este e-mail já tem cadastro. Use "Entrar" (ou "Esqueci a senha").','auth/weak-password':'A senha precisa ter pelo menos 6 caracteres.',
+      'auth/too-many-requests':'Muitas tentativas. Aguarde alguns minutos e tente de novo.','auth/network-request-failed':'Sem conexão com a internet.',
+      'auth/operation-not-allowed':'O login por e-mail e senha ainda não foi ativado no Firebase (Authentication → Método de login → E-mail/senha).'})[c]||('Não consegui concluir ('+(c||e.message)+').');},
+  async login(email,senha){
+    if(!email||!senha){S.msg='Informe e-mail e senha.';draw();return;}
+    try{S.msg='Entrando…';draw();await this.fb.login(email,senha);S.msg='';}catch(e){S.msg=this.erroAuth(e);}draw();window.scrollTo(0,0);
   },
+  async cadastrar(f){
+    if(!f.nome||f.nome.trim().length<3||!f.setor||!f.setor.trim()){S.msg='Informe nome completo e setor.';draw();return;}
+    if(!f.email||!f.senha||f.senha.length<6){S.msg='Informe e-mail e uma senha de pelo menos 6 caracteres.';draw();return;}
+    if(f.senha!==f.senha2){S.msg='As senhas não conferem.';draw();return;}
+    try{this.cadastrando=true;S.msg='Enviando cadastro…';draw();
+      const u=await this.fb.cadastrar(f.nome.trim(),f.setor.trim(),f.email.trim(),f.senha);
+      this.cadastrando=false;await this.papel(u);S.fm={};
+      S.msg='Cadastro enviado! A coordenação do NGI precisa aprová-lo antes de você poder validar propostas.';}
+    catch(e){this.cadastrando=false;S.msg=this.erroAuth(e);}
+    draw();window.scrollTo(0,0);
+  },
+  async esqueci(email){if(!email){S.msg='Digite seu e-mail no campo acima.';draw();return;}
+    try{await this.fb.reset(email);S.msg='Se este e-mail tiver cadastro, enviamos um link para redefinir a senha.';}catch(e){S.msg=this.erroAuth(e);}draw();},
+  async decidir(id,dec){
+    const u=(this.usuarios||[]).find(x=>x.id===id);if(!u||!this.me.admin)return;
+    try{await this.fb.decidirUsuario(u,dec,this.me.email);S.msg=dec==='aprovado'?'Cadastro de '+u.nome+' aprovado.':'Acesso de '+u.nome+' '+(dec==='recusado'?'recusado':'revogado')+'.';}
+    catch(e){S.msg='Não foi possível salvar ('+(e.code||e.message)+').';}draw();},
   async logout(){try{await this.fb.logout();S.msg='Você saiu.';}catch(e){}},
   async load(){
     let j={};
@@ -452,7 +485,7 @@ async function setDest(c,d){const x={d,uid:who(),at:new Date().toISOString()};aw
 function fmtDT(s){if(!s)return '—';const d=new Date(s);return isNaN(d)?s:d.toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'});}
 function draw(){
   const d=cur(),v=vals();
-  const tabs=[['painel','Painel'],['pend','Pendências'],['contr','Contratações'],['cruz','Cruzamento 2026×2027'],['pncp','Situação no PNCP'],['a26','Análise 2026']].concat(Store.canWrite?[['prop','Propostas'+((S.prop||[]).filter(p=>p.status==='pendente').length?' ('+(S.prop||[]).filter(p=>p.status==='pendente').length+')':'')]]:[['minhas','Minhas propostas'+(Cesta.get().length?' ('+Cesta.get().length+')':'')]],[['dados','Importar / Exportar']],Store.canWrite?[['hist','Histórico']]:[],[['cfg','Configurações']]);
+  const tabs=[['painel','Painel'],['pend','Pendências'],['contr','Contratações'],['cruz','Cruzamento 2026×2027'],['pncp','Situação no PNCP'],['a26','Análise 2026']].concat(Store.canWrite?[['prop','Propostas'+((S.prop||[]).filter(p=>p.status==='pendente').length?' ('+(S.prop||[]).filter(p=>p.status==='pendente').length+')':'')]]:[['minhas','Minhas propostas'+(Cesta.get().length?' ('+Cesta.get().length+')':'')]],[['dados','Importar / Exportar']],Store.canWrite?[['hist','Histórico']]:[],Store.me&&Store.me.admin?[['cad','Cadastros'+((Store.usuarios||[]).filter(u=>u.status==='pendente').length?' ('+(Store.usuarios||[]).filter(u=>u.status==='pendente').length+')':'')]]:[],[['cfg','Configurações']]);
   if(!tabs.some(t=>t[0]===S.tab))S.tab='painel';
   if(S.ano==='todos'&&!['pend','contr','pncp'].includes(S.tab))S.ano=2026;
   const age=S.pn&&S.pn.coletado?(Date.now()-new Date(S.pn.coletado))/864e5:null;
@@ -461,8 +494,8 @@ function draw(){
   <div class="msg ${age!=null&&age>10?'warn':''}"><b>Última atualização do PNCP:</b> ${S.pn?fmtDT(S.pn.coletado):'ainda não carregado'}${S.pn?` · fonte: coleta automática no GitHub`:''}${age!=null&&age>10?' · <b>desatualizado há '+Math.floor(age)+' dias: verifique a aba Actions do GitHub</b>':''} <button class="s" id="rl">Recarregar</button><br><span class="sub">Arquivo do PCA 2026: ${fmtDT((S.meta||{}).pca2026)} · PCA 2027: ${fmtDT((S.meta||{}).pca2027)}${Store.canWrite?' · <b>coordenação: '+esc(who())+'</b>':' · suas alterações viram propostas'}</span>${S.pnMsg?'<br><span class="sub">'+esc(S.pnMsg)+'</span>':''}</div>`;
   if(S.msg)h+=`<div class="msg">${esc(S.msg)}</div>`;
   h+=`<nav>${tabs.map(t=>`<button data-t="${t[0]}" class="${S.tab==t[0]?'on':''}">${t[1]}</button>`).join('')}</nav>`;
-  if(!yrs().length&&S.tab!='dados'&&S.tab!='cfg'&&S.tab!='minhas')h+=`<div class="box">PCA ${S.ano} ainda não está no repositório. Envie <code>pca_${S.ano}.csv</code> ao repositório e rode a rotina em Actions (ou espere a próxima execução).</div>`;
-  else h+=({painel,pend,contr,cruz,pncp,a26,prop,minhas,dados,hist,cfg}[S.tab])();
+  if(!yrs().length&&S.tab!='dados'&&S.tab!='cfg'&&S.tab!='minhas'&&S.tab!='cad')h+=`<div class="box">PCA ${S.ano} ainda não está no repositório. Envie <code>pca_${S.ano}.csv</code> ao repositório e rode a rotina em Actions (ou espere a próxima execução).</div>`;
+  else h+=({painel,pend,contr,cruz,pncp,a26,prop,minhas,dados,hist,cad,cfg}[S.tab])();
   $('#app').innerHTML=h;
   $('#ano').onchange=e=>{S.ano=e.target.value==='todos'?'todos':+e.target.value;draw();};
   document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{S.tab=b.dataset.t;draw();});
@@ -603,12 +636,25 @@ function hist(){
   <div class="tw"><table><thead><tr><th>Data e hora</th><th>Quem</th><th>Ação</th><th>Item</th><th>De</th><th>Para</th><th>Justificativa</th></tr></thead><tbody>${L.slice(0,500).map(a=>`<tr><td>${fmtDT(a.at)}</td><td>${esc(a.uid)}${a.prop?'<br><span class="sub">proposta de '+esc(a.prop)+'</span>':''}</td><td>${esc(a.acao)}</td><td>${esc(a.ref)}</td><td>${esc(a.antes)}</td><td>${esc(a.depois)}</td><td>${esc(a.just)}${a.pjust?'<br><span class="sub">Proponente: '+esc(a.pjust)+'</span>':''}</td></tr>`).join('')||'<tr><td colspan="7" class="sub">Nenhuma alteração registrada ainda.</td></tr>'}</tbody></table></div>`;
 }
 function cfg(){
-  const m=Store.me;
-  const est=!Store.fb?'<span class="tag crit">Sem conexão com o servidor</span>':!m?'<span class="tag" style="color:var(--mut)">Consulta e propostas</span>':m.validador?`<span class="tag ok">Validação liberada · ${esc(m.email)}</span>`:`<span class="tag med">${esc(m.email)} não é validadora</span>`;
+  const m=Store.me,f=S.fm=S.fm||{},modo=S.cfgModo||'entrar';
+  const est=!Store.fb?'<span class="tag crit">Sem conexão com o servidor</span>':!m?'<span class="tag" style="color:var(--mut)">Consulta e propostas</span>':m.admin?`<span class="tag ok">Coordenação (administradora) · ${esc(m.email)}</span>`:m.validador?`<span class="tag ok">Validação liberada · ${esc(m.email)}</span>`:m.status==='pendente'?`<span class="tag med">Cadastro aguardando aprovação · ${esc(m.email)}</span>`:`<span class="tag med">${esc(m.email)} sem acesso de validação</span>`;
+  const inp=(id,ph,t,v)=>`<input id="${id}" data-fm="${id}" type="${t||'text'}" placeholder="${ph}" value="${esc(v||'')}" style="min-width:230px">`;
+  let corpo='';
+  if(!Store.fb)corpo='';
+  else if(m)corpo=`<p class="sub">${m.validador?'Você pode aprovar propostas e registrar decisões diretamente.':m.status==='pendente'?'Seu cadastro foi enviado e aguarda a aprovação do NGI.':'Este acesso não está liberado. Fale com o NGI.'}</p><div class="row" style="margin-top:12px"><button class="s" id="c_out">Sair</button></div>`;
+  else corpo=`<div class="row" style="margin:10px 0"><button class="${modo==='entrar'?'p':'s'}" data-modo="entrar">Entrar</button><button class="${modo==='cadastro'?'p':'s'}" data-modo="cadastro">Pedir cadastro</button></div>
+    <div class="row">${modo==='cadastro'?inp('fm_nome','Nome completo','text',f.fm_nome)+inp('fm_setor','Setor','text',f.fm_setor):''}${inp('fm_email','E-mail','email',f.fm_email)}${inp('fm_senha','Senha','password',f.fm_senha)}${modo==='cadastro'?inp('fm_senha2','Repita a senha','password',f.fm_senha2):''}</div>
+    <div class="row" style="margin-top:12px">${modo==='entrar'?'<button class="p" id="c_in">Entrar</button><button class="s" id="c_esq">Esqueci a senha</button>':'<button class="p" id="c_cad">Enviar pedido de cadastro</button>'}</div>
+    ${modo==='cadastro'?'<p class="sub">O acesso só é liberado depois que o NGI aprovar o seu cadastro.</p>':''}`;
   return `<div class="box"><b>Acesso da coordenação</b> ${est}
-  <p class="sub"><b>Qualquer servidor</b> pode consultar o painel e <b>propor alterações</b>, sem conta e sem enviar e-mail: informa nome, setor e e-mail uma única vez, acumula as propostas em <b>Minhas propostas</b> e envia todas de uma vez. Elas só valem depois de <b>aprovadas pela coordenação</b>.</p>
-  <p class="sub">A coordenação entra com a conta Google cadastrada como validadora. Toda alteração exige justificativa e fica no Histórico, com o nome de quem propôs e de quem validou.</p>
-  <div class="row" style="margin-top:12px">${m?'<button class="s" id="c_out">Sair</button>':'<button class="p" id="c_in" '+(Store.fb?'':'disabled')+'>Entrar com Google</button>'}</div></div>`;
+  <p class="sub"><b>Qualquer servidor</b> pode consultar o painel e <b>propor alterações</b>, sem conta: informa nome, setor e e-mail uma única vez, acumula as propostas em <b>Minhas propostas</b> e envia todas de uma vez. Elas só valem depois de <b>aprovadas pela coordenação</b>.</p>
+  <p class="sub">Quem vai aprovar propostas pede cadastro com e-mail e senha; o NGI aprova cada pedido. Toda alteração exige justificativa e fica no Histórico, com o nome de quem propôs e de quem validou.</p>${corpo}</div>`;
+}
+function cad(){
+  const U=(Store.usuarios||[]).slice().reverse();
+  const tg=s=>s==='pendente'?'<span class="tag med">Pendente</span>':s==='aprovado'?'<span class="tag ok">Aprovado</span>':'<span class="tag crit">'+(s==='revogado'?'Revogado':'Recusado')+'</span>';
+  return `<p class="sub">Pedidos de cadastro de quem quer validar propostas. Só quem você aprovar aqui consegue ler as propostas e gravar decisões.</p>
+  <div class="tw"><table><thead><tr><th>Pedido em</th><th>Nome</th><th>Setor</th><th>E-mail</th><th>Situação</th><th>Ação</th></tr></thead><tbody>${U.map(u=>`<tr><td>${fmtDT(u.at)}</td><td><b>${esc(u.nome)}</b></td><td>${esc(u.setor)}</td><td>${esc(u.email)}</td><td>${tg(u.status)}${u.por?'<br><span class="sub">por '+esc(u.por)+'</span>':''}</td><td>${u.id===(Store.me||{}).uid?'<span class="sub">você</span>':u.status==='pendente'?`<button class="p" data-ud="${u.id}|aprovado">Aprovar</button> <button class="s" data-ud="${u.id}|recusado">Recusar</button>`:u.status==='aprovado'?`<button class="s" data-ud="${u.id}|revogado">Revogar acesso</button>`:`<button class="s" data-ud="${u.id}|aprovado">Aprovar</button>`}</td></tr>`).join('')||'<tr><td colspan="6" class="sub">Nenhum pedido de cadastro ainda.</td></tr>'}</tbody></table></div>`;
 }
 function dados(){
   const d=cur(),nx=S.ds[S.ano+1];
@@ -624,7 +670,14 @@ function bind(){
   const pf=$('#pf');if(pf)pf.onchange=()=>{S.pf=pf.value;draw();};const pq=$('#pq');if(pq)pq.oninput=()=>{S.pq=pq.value;draw();const n=$('#pq');if(n){n.focus();n.setSelectionRange(n.value.length,n.value.length);}};
   document.querySelectorAll('[data-pv]').forEach(b=>b.onclick=()=>{const [i,d]=b.dataset.pv.split('|');validar(i,d);});
   const px=$('#px');if(px)px.onclick=()=>{const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';const c=['Protocolo','Recebida em','PCA','DFD','Título','Área','Proponente','Setor','E-mail','Ação','De','Para','Justificativa do proponente','Situação','Validado por','Data da validação','Comentário da validação'];save('propostas_pca.csv','\ufeff'+[c.join(';')].concat((S.prop||[]).map(p=>[p.lote,p.at,p.ano,p.ref,p.titulo,p.area,p.prop.nome,p.prop.setor,p.prop.email,p.acao,p.antes,p.depois,p.just,p.status,(p.val||{}).uid,(p.val||{}).at,(p.val||{}).coment].map(q).join(';'))).join('\n'));};
-  const ci=$('#c_in');if(ci)ci.onclick=()=>Store.login();const co=$('#c_out');if(co)co.onclick=()=>Store.logout();
+  document.querySelectorAll('[data-fm]').forEach(e=>e.oninput=()=>{(S.fm=S.fm||{})[e.dataset.fm]=e.value;});
+  document.querySelectorAll('[data-modo]').forEach(b=>b.onclick=()=>{S.cfgModo=b.dataset.modo;S.msg='';draw();});
+  const F_=()=>S.fm||{};
+  const ci=$('#c_in');if(ci)ci.onclick=()=>Store.login((F_().fm_email||'').trim(),F_().fm_senha||'');
+  const cc_=$('#c_cad');if(cc_)cc_.onclick=()=>Store.cadastrar({nome:F_().fm_nome,setor:F_().fm_setor,email:F_().fm_email,senha:F_().fm_senha,senha2:F_().fm_senha2});
+  const ce_=$('#c_esq');if(ce_)ce_.onclick=()=>Store.esqueci((F_().fm_email||'').trim());
+  document.querySelectorAll('[data-ud]').forEach(b=>b.onclick=()=>{const [i,d]=b.dataset.ud.split('|');Store.decidir(i,d);});
+  const co=$('#c_out');if(co)co.onclick=()=>Store.logout();
   [['mi_n','prop_nome'],['mi_s','prop_setor'],['mi_e','prop_email']].forEach(([id,k])=>{const e=$('#'+id);if(e)e.onchange=()=>LS.set(k,e.value.trim());});
   document.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{Cesta.set(Cesta.get().filter(x=>x.id!==b.dataset.rm));draw();});
   const me_=$('#mi_env');if(me_)me_.onclick=()=>{[['mi_n','prop_nome'],['mi_s','prop_setor'],['mi_e','prop_email']].forEach(([id,k])=>LS.set(k,$('#'+id).value.trim()));enviarCesta();};
