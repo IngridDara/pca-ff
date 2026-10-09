@@ -1,30 +1,32 @@
 <!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Validação do PCA - Fundação Florestal</title>
 <style>
-:root{--bg:#f6f7f4;--card:#fff;--tx:#1d2a24;--mut:#66736c;--bd:#dfe4dd;--ac:#1f6b4a;--ac2:#e6f2ec;--crit:#b3261e;--med:#b26a00;--baixa:#5b6b8a;--ok:#2e7d32}
-@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#141a17;--card:#1c2420;--tx:#e7ece8;--mut:#9aa8a0;--bd:#2d3832;--ac:#5fc191;--ac2:#1f3329;--crit:#ff8a80;--med:#ffb74d;--baixa:#9db0d6;--ok:#81c784}}
-:root[data-theme=dark]{--bg:#141a17;--card:#1c2420;--tx:#e7ece8;--mut:#9aa8a0;--bd:#2d3832;--ac:#5fc191;--ac2:#1f3329;--crit:#ff8a80;--med:#ffb74d;--baixa:#9db0d6;--ok:#81c784}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.45 system-ui,sans-serif}
+/* Identidade Fundação Florestal — fundo claro. Para trocar as cores, altere só estas variáveis. */
+:root{color-scheme:light;--bg:#f7f6f1;--card:#fffefb;--tx:#22302a;--mut:#667068;--bd:#e1e3d8;--ac:#1d6b3f;--ac-d:#14502e;--ac2:#e9f1e3;--sol:#d9a21b;--crit:#b3261e;--med:#a86100;--baixa:#506384;--ok:#2e7d32}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 'Segoe UI',system-ui,-apple-system,sans-serif}
 .w{max-width:1100px;margin:0 auto;padding:16px}
-h1{font-size:20px;margin:0}header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:12px}
+h1{font-size:21px;margin:0;font-weight:700;letter-spacing:.2px}
+header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:14px;padding:16px 20px;border-radius:14px;background:linear-gradient(135deg,var(--ac-d),var(--ac));color:#fff;border-bottom:4px solid var(--sol);box-shadow:0 2px 8px rgba(20,80,46,.15)}
+header .sub,header label{color:#e3efe0}header select{background:#fff;color:var(--tx);border-color:#fff}
+header h1:before{content:"";display:inline-block;width:10px;height:22px;margin-right:10px;vertical-align:-4px;border-radius:5px;background:var(--sol)}
 .sub{color:var(--mut);font-size:13px}
 nav{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--bd);margin-bottom:14px}
 nav button{background:none;border:0;padding:9px 12px;color:var(--mut);cursor:pointer;font:inherit;border-bottom:2px solid transparent}
-nav button.on{color:var(--ac);border-color:var(--ac);font-weight:600}
+nav button:hover{color:var(--ac)}nav button.on{color:var(--ac-d);border-color:var(--sol);border-bottom-width:3px;font-weight:600}
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
-.c{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:12px}
-.c b{display:block;font-size:22px}.c span{color:var(--mut);font-size:12px}
+.c{background:var(--card);border:1px solid var(--bd);border-top:3px solid var(--ac);border-radius:10px;padding:12px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.c b{display:block;font-size:21px;overflow-wrap:anywhere}.c span{color:var(--mut);font-size:12px}
 .tw{overflow-x:auto;background:var(--card);border:1px solid var(--bd);border-radius:10px}
 table{border-collapse:collapse;width:100%;font-size:13px}th,td{padding:7px 9px;border-bottom:1px solid var(--bd);text-align:left;vertical-align:top}
-th{background:var(--ac2);position:sticky;top:0;white-space:nowrap}
+th{background:var(--ac2);color:var(--ac-d);position:sticky;top:0;white-space:nowrap}tbody tr:hover td{background:#f4f7ef}
 .tag{display:inline-block;padding:1px 8px;border-radius:99px;font-size:11px;font-weight:600;border:1px solid currentColor}
 .crit{color:var(--crit)}.med{color:var(--med)}.baixa{color:var(--baixa)}.ok{color:var(--ok)}
 button.p,select,input,textarea{font:inherit;color:var(--tx);background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:6px 10px}
-button.p{background:var(--ac);color:#fff;border-color:var(--ac);cursor:pointer}button.s{cursor:pointer;font:inherit;color:var(--tx);background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:6px 10px}
+button.p{background:var(--ac);color:#fff;border-color:var(--ac);cursor:pointer}button.p:hover{background:var(--ac-d)}button.s{cursor:pointer;font:inherit;color:var(--tx);background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:6px 10px}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
 .bar{height:8px;border-radius:4px;background:var(--bd);overflow:hidden;min-width:80px}.bar i{display:block;height:100%;background:var(--ac)}
 .box{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:14px;margin-bottom:12px}
 .drop{border:2px dashed var(--bd);border-radius:10px;padding:22px;text-align:center;color:var(--mut)}
-.msg.warn{background:#fff3e0;color:#7a4a00}.msg{padding:8px 12px;border-radius:8px;background:var(--ac2);margin-bottom:10px;font-size:13px}
+.msg.warn{background:#fdf1d8;color:#6b4300}.msg{padding:8px 12px;border-radius:8px;background:var(--ac2);margin-bottom:10px;font-size:13px}
 dialog{border:1px solid var(--bd);border-radius:12px;background:var(--card);color:var(--tx);max-width:560px;width:calc(100% - 32px)}
 dialog label{display:block;margin:8px 0 2px;font-size:12px;color:var(--mut)}dialog input,dialog select,dialog textarea{width:100%}
 @media(max-width:600px){.w{padding:12px}}
@@ -309,7 +311,7 @@ function draw(){
   const age=S.pn&&S.pn.coletado?(Date.now()-new Date(S.pn.coletado))/864e5:null;
   let h=`<header><div><h1>Validação e adequação do PCA</h1><div class="sub">Fundação Florestal · NGI coordena, NCP consolida</div></div>
   <div class="row"><label class="sub">PCA</label><select id="ano">${[2026,2027].map(a=>`<option ${a==S.ano?'selected':''}>${a}</option>`).join('')}${['pend','contr','pncp'].includes(S.tab)?`<option value="todos" ${S.ano==='todos'?'selected':''}>Todos</option>`:''}</select></div></header>
-  <div class="msg ${age!=null&&age>10?'warn':''}"><b>Última atualização do PNCP:</b> ${S.pn?fmtDT(S.pn.coletado):'ainda não carregado'}${S.pn?` · fonte: coleta automática no GitHub`:''}${age!=null&&age>10?' · <b>desatualizado há '+Math.floor(age)+' dias: verifique o agendamento no Mac</b>':''} <button class="s" id="rl">Recarregar</button><br><span class="sub">Arquivo do PCA 2026: ${fmtDT((S.meta||{}).pca2026)} · PCA 2027: ${fmtDT((S.meta||{}).pca2027)}${Store.canWrite?' · <b>gravação ativa</b>':' · modo leitura'}</span>${S.pnMsg?'<br><span class="sub">'+esc(S.pnMsg)+'</span>':''}</div>`;
+  <div class="msg ${age!=null&&age>10?'warn':''}"><b>Última atualização do PNCP:</b> ${S.pn?fmtDT(S.pn.coletado):'ainda não carregado'}${S.pn?` · fonte: coleta automática no GitHub`:''}${age!=null&&age>10?' · <b>desatualizado há '+Math.floor(age)+' dias: verifique a aba Actions do GitHub</b>':''} <button class="s" id="rl">Recarregar</button><br><span class="sub">Arquivo do PCA 2026: ${fmtDT((S.meta||{}).pca2026)} · PCA 2027: ${fmtDT((S.meta||{}).pca2027)}${Store.canWrite?' · <b>gravação ativa</b>':' · modo leitura'}</span>${S.pnMsg?'<br><span class="sub">'+esc(S.pnMsg)+'</span>':''}</div>`;
   if(S.msg)h+=`<div class="msg">${esc(S.msg)}</div>`;
   h+=`<nav>${tabs.map(t=>`<button data-t="${t[0]}" class="${S.tab==t[0]?'on':''}">${t[1]}</button>`).join('')}</nav>`;
   if(!yrs().length&&S.tab!='dados'&&S.tab!='cfg')h+=`<div class="box">PCA ${S.ano} ainda não está no repositório. Envie <code>pca_${S.ano}.csv</code> ao repositório e rode a rotina em Actions (ou espere a próxima execução).</div>`;
