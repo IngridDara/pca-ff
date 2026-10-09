@@ -1,0 +1,3 @@
+2026-10-09 17:25:37 PCA 2026 convertido para UTF-8 (arquivo de 2026-10-09T17:25:36-03:00).
+2026-10-09 17:25:37 PCA 2027 convertido para UTF-8 (arquivo de 2026-10-09T17:25:36-03:00).
+2026-10-09 17:28:15 OK: 131 contratações gravadas em pncp_ff.csv
