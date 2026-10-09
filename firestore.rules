@@ -1,0 +1,60 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Validador = e-mail Google verificado que tenha um documento em /validadores/{e-mail}.
+    // Esses documentos só podem ser criados pelo Console do Firebase (nunca pelo painel).
+    function validador() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && exists(/databases/$(database)/documents/validadores/$(request.auth.token.email));
+    }
+
+    match /validadores/{email} {
+      allow read: if request.auth != null && request.auth.token.email == email;
+      allow write: if false;
+    }
+
+    // Propostas: qualquer pessoa envia (sem login); só a coordenação lê e decide.
+    match /propostas/{id} {
+      allow read: if validador();
+      allow create: if request.resource.data.keys().hasOnly(
+            ['lote','nome','setor','email','acao','cid','ref','ano','titulo','area','antes','depois','just','ap','status','criadoEm'])
+        && request.resource.data.keys().hasAll(['lote','nome','setor','email','acao','cid','ref','just','ap','status','criadoEm'])
+        && request.resource.data.status == 'pendente'
+        && request.resource.data.criadoEm == request.time
+        && request.resource.data.nome is string && request.resource.data.nome.size() >= 3 && request.resource.data.nome.size() <= 120
+        && request.resource.data.setor is string && request.resource.data.setor.size() >= 1 && request.resource.data.setor.size() <= 120
+        && request.resource.data.email is string && request.resource.data.email.matches('^[^@ ]+@[^@ ]*sp\\.gov\\.br$')
+        && request.resource.data.just is string && request.resource.data.just.size() >= 10 && request.resource.data.just.size() <= 2000
+        && request.resource.data.lote is string && request.resource.data.lote.size() <= 40
+        && request.resource.data.acao is string && request.resource.data.acao.size() <= 200
+        && request.resource.data.ref is string && request.resource.data.ref.size() <= 200
+        && request.resource.data.cid is string && request.resource.data.cid.size() <= 100
+        && request.resource.data.get('antes','') is string && request.resource.data.get('antes','').size() <= 2000
+        && request.resource.data.get('depois','') is string && request.resource.data.get('depois','').size() <= 2000
+        && request.resource.data.get('titulo','') is string && request.resource.data.get('titulo','').size() <= 1000
+        && request.resource.data.get('area','') is string && request.resource.data.get('area','').size() <= 300
+        && request.resource.data.ap is map
+        && request.resource.data.ap.t in ['dest','ov','aj','vinc'];
+      allow update: if validador()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','val'])
+        && request.resource.data.status in ['aprovada','recusada'];
+      allow delete: if false;
+    }
+
+    // Decisões já validadas: leitura pública (o painel mostra a todos); gravação só da coordenação.
+    match /decisoes/{id} {
+      allow read: if true;
+      allow create, update: if validador() && request.resource.data.t in ['dest','ov','aj','vinc'];
+      allow delete: if false;
+    }
+
+    // Histórico: só a coordenação lê; só cria (nunca altera nem apaga).
+    match /auditoria/{id} {
+      allow read: if validador();
+      allow create: if validador();
+      allow update, delete: if false;
+    }
+  }
+}
