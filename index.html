@@ -32,7 +32,7 @@ dialog label{display:block;margin:8px 0 2px;font-size:12px;color:var(--mut)}dial
 @media(max-width:600px){.w{padding:12px}}
 </style>
 <div class="w" id="app"></div>
-<dialog id="dlg"></dialog>
+<dialog id="dlg"></dialog><dialog id="dj"></dialog>
 <script>
 const Core = (() => {
   const COLS = ['num','status','situacao','titulo','categoria','uasg','ini','fim','prazo','area','dfd','prioridade','item_dfd','conclusao_dfd','classificacao','cod_grupo','nome_grupo','cod_pdm','nome_pdm','cod_item','desc_item','unid','vunit','qtd','vtotal'];
@@ -230,7 +230,7 @@ const LS={get(k){try{return localStorage.getItem(k)||''}catch(e){return ''}},set
 const guess=(()=>{const m=location.hostname.match(/^([^.]+)\.github\.io$/),p=location.pathname.split('/').filter(Boolean);return m&&p[0]?m[1]+'/'+p[0]:'';})();
 const Store={
   cfg:{token:LS.get('gh_token'),repo:LS.get('gh_repo')||guess,path:LS.get('gh_path')||'decisoes.json',nome:LS.get('gh_nome')},
-  data:{ajustes:{},ov:{},destino:{},vinc:{}},sha:null,
+  data:{ajustes:{},ov:{},destino:{},vinc:{},auditoria:[]},sha:null,
   get canWrite(){return !!(this.cfg.token&&this.cfg.repo);},
   url(){return 'https://api.github.com/repos/'+this.cfg.repo+'/contents/'+this.cfg.path.split('/').map(encodeURIComponent).join('/');},
   hdr(){return {Accept:'application/vnd.github+json',Authorization:'Bearer '+this.cfg.token};},
@@ -243,13 +243,13 @@ const Store={
         else throw new Error('GitHub respondeu '+r.status+' ao ler as decisões (confira repositório e token).');}
       else{const r=await fetch('decisoes.json?t='+Date.now());if(r.ok)j=await r.json();}
     }catch(e){S.msg=e.message||'Falha ao ler decisões.';}
-    if(j){this.data={ajustes:j.ajustes||{},ov:j.ov||{},destino:j.destino||{},vinc:j.vinc||{}};}
-    S.aj=this.data.ajustes;S.ov=this.data.ov;S.dest=this.data.destino;S.vinc=this.data.vinc;
+    if(j){this.data={ajustes:j.ajustes||{},ov:j.ov||{},destino:j.destino||{},vinc:j.vinc||{},auditoria:j.auditoria||[]};}
+    S.aj=this.data.ajustes;S.ov=this.data.ov;S.dest=this.data.destino;S.vinc=this.data.vinc;S.aud=this.data.auditoria;
   },
   async mutate(fn){
     if(!this.canWrite){S.msg='Modo leitura: informe o token do GitHub em Configurações para salvar decisões.';draw();return false;}
     for(let t=0;t<3;t++){
-      fn(this.data);S.aj=this.data.ajustes;S.ov=this.data.ov;S.dest=this.data.destino;S.vinc=this.data.vinc;draw();
+      fn(this.data);S.aj=this.data.ajustes;S.ov=this.data.ov;S.dest=this.data.destino;S.vinc=this.data.vinc;S.aud=this.data.auditoria;draw();
       const body={message:'Decisão registrada por '+(this.cfg.nome||'equipe'),content:btoa(unescape(encodeURIComponent(JSON.stringify(this.data,null,1))))};
       if(this.sha)body.sha=this.sha;
       try{const r=await fetch(this.url(),{method:'PUT',headers:{...this.hdr(),'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -262,6 +262,27 @@ const Store={
   }
 };
 const who=()=>Store.cfg.nome||'';
+/* Registro de alterações: exige identificação e justificativa; tudo fica no histórico (auditoria). */
+const JUST_MIN=10;
+function justificar(titulo,antes,depois){
+  return new Promise(res=>{
+    const d=$('#dj');
+    d.innerHTML=`<h3>Justificativa obrigatória</h3><p><b>${esc(titulo)}</b></p>${antes!==undefined?`<p class="sub">De: ${esc(antes||'—')}<br>Para: ${esc(depois||'—')}</p>`:''}
+    <label>Por que você está fazendo esta alteração? (mínimo ${JUST_MIN} caracteres)</label><textarea id="jt" rows="3"></textarea><div class="sub" id="je" style="color:var(--crit)"></div>
+    <p class="sub">Registrado em nome de <b>${esc(who())}</b>, com data e hora.</p>
+    <div class="row" style="margin-top:12px"><button class="p" id="jok">Confirmar</button><button class="s" id="jno">Cancelar</button></div>`;
+    d.showModal();let feito=false;const fim=v=>{if(feito)return;feito=true;d.close();res(v);};
+    $('#jno').onclick=()=>fim(null);d.oncancel=()=>fim(null);
+    $('#jok').onclick=()=>{const t=$('#jt').value.trim();if(t.length<JUST_MIN){$('#je').textContent='Escreva a justificativa (mínimo '+JUST_MIN+' caracteres).';return;}fim(t);};
+  });
+}
+async function registrar(acao,cid,rotulo,antes,depois,fn){
+  if(!Store.canWrite||!who()){S.msg='Para alterar, é preciso estar identificado e com acesso aprovado (aba Configurações). Sem isso o painel é só para consulta.';draw();return false;}
+  const j=await justificar(acao+' · '+rotulo,antes,depois);
+  if(j===null){draw();return false;}
+  return Store.mutate(D=>{fn(D);(D.auditoria=D.auditoria||[]).push({at:new Date().toISOString(),uid:who(),acao,cid,ref:rotulo,antes:antes||'',depois:depois||'',just:j});});
+}
+
 async function getText(path){const r=await fetch(path+'?t='+Date.now());if(!r.ok)return null;return await r.text();}
 async function loadPNCP(){
   let err='';
@@ -291,22 +312,28 @@ async function onFile(f,ano){
 }
 async function setStatus(cid,regra,status,obs){
   const id=ajId(cid,regra);const d={cid,regra,status,obs:obs||'',uid:who(),at:new Date().toISOString()};
-  await Store.mutate(D=>{D.ajustes[id]=d;});
+  const c=allCs().find(x=>x.id==cid);const ant=(S.aj[id]||{}).status||'pendente';
+  await registrar('Apontamento',cid,(c?c.num:cid)+' · '+regra,ST[ant]||ant,ST[status]||status,D=>{D.ajustes[id]=d;});
 }
-async function saveOv(cid,f){await Store.mutate(D=>{D.ov[cid]={f};});}
+async function saveOv(cid,f){
+  delete f.num; /* o número do DFD não é editável */
+  const c=allCs().find(x=>x.id==cid),ant=(S.ov[cid]||{}).f||{};
+  const fmt=o=>Object.keys(o).map(k=>k+': '+o[k]).join('; ');
+  await registrar('Edição de dados',cid,c?c.num:cid,fmt(ant),fmt(f),D=>{D.ov[cid]={f};});
+}
 function sevTag(s){return `<span class="tag ${s}">${{crit:'Crítico',med:'Médio',baixa:'Baixo'}[s]}</span>`}
-const ovF=()=>{const o={};Object.keys(S.ov).forEach(k=>o[k]=S.ov[k].f||{});return o;};
+const ovF=()=>{const o={};Object.keys(S.ov).forEach(k=>{const f={...(S.ov[k].f||{})};delete f.num;o[k]=f;});return o;};
 const DEST={'':'A definir',manter:'Manter no ano',proximo:'Enviar ao PCA seguinte',cancelar:'Cancelar'};
 const yrs=()=>S.ano==='todos'?[2026,2027].filter(a=>S.ds[a]):(S.ds[S.ano]?[S.ano]:[]);
 const allVals=()=>yrs().flatMap(a=>S.val[a]||[]);
 const allCs=()=>yrs().flatMap(a=>S.ds[a].cs);
 const destOf=c=>(S.dest[c.id]||{}).d||'';
 function destSel(c){return `<select data-dest="${esc(c.id)}">${Object.keys(DEST).map(k=>`<option value="${k}" ${destOf(c)==k?'selected':''}>${k=='manter'?'Manter em '+c.ano:k=='proximo'?'Enviar ao PCA '+(c.ano+1):DEST[k]}</option>`).join('')}</select>`}
-async function setDest(c,d){const x={d,uid:who(),at:new Date().toISOString()};await Store.mutate(D=>{D.destino[c.id]=x;});}
+async function setDest(c,d){const x={d,uid:who(),at:new Date().toISOString()};await registrar('Destino do item',c.id,c.num,DEST[destOf(c)]||'A definir',DEST[d]||d,D=>{D.destino[c.id]=x;});}
 function fmtDT(s){if(!s)return '—';const d=new Date(s);return isNaN(d)?s:d.toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'});}
 function draw(){
   const d=cur(),v=vals();
-  const tabs=[['painel','Painel'],['pend','Pendências'],['contr','Contratações'],['cruz','Cruzamento 2026×2027'],['pncp','Situação no PNCP'],['dados','Importar / Exportar'],['cfg','Configurações']];
+  const tabs=[['painel','Painel'],['pend','Pendências'],['contr','Contratações'],['cruz','Cruzamento 2026×2027'],['pncp','Situação no PNCP'],['dados','Importar / Exportar'],['hist','Histórico'],['cfg','Configurações']];
   if(S.ano==='todos'&&!['pend','contr','pncp'].includes(S.tab))S.ano=2026;
   const age=S.pn&&S.pn.coletado?(Date.now()-new Date(S.pn.coletado))/864e5:null;
   let h=`<header><div><h1>Validação e adequação do PCA</h1><div class="sub">Fundação Florestal · NGI coordena, NCP consolida</div></div>
@@ -315,7 +342,7 @@ function draw(){
   if(S.msg)h+=`<div class="msg">${esc(S.msg)}</div>`;
   h+=`<nav>${tabs.map(t=>`<button data-t="${t[0]}" class="${S.tab==t[0]?'on':''}">${t[1]}</button>`).join('')}</nav>`;
   if(!yrs().length&&S.tab!='dados'&&S.tab!='cfg')h+=`<div class="box">PCA ${S.ano} ainda não está no repositório. Envie <code>pca_${S.ano}.csv</code> ao repositório e rode a rotina em Actions (ou espere a próxima execução).</div>`;
-  else h+=({painel,pend,contr,cruz,pncp,dados,cfg}[S.tab])();
+  else h+=({painel,pend,contr,cruz,pncp,dados,hist,cfg}[S.tab])();
   $('#app').innerHTML=h;
   $('#ano').onchange=e=>{S.ano=e.target.value==='todos'?'todos':+e.target.value;draw();};
   document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{S.tab=b.dataset.t;draw();});
@@ -391,7 +418,13 @@ function pncp(){
 }
 function decideVinc(key,ok){
   const [ano,num]=[+key.split(':')[0],key.slice(5)];const r=Core.cruzarPNCP(S.ds[ano],S.pn.rows,S.vinc).find(x=>x.num===num);if(!r)return;
-  const v=ok?{conf:'confirmada',ids:r.ids,obs:'Confirmada pela equipe.'}:{conf:'descartada',ids:[],obs:''};Store.mutate(D=>{D.vinc[key]=v;});
+  const v=ok?{conf:'confirmada',ids:r.ids,obs:'Confirmada pela equipe.'}:{conf:'descartada',ids:[],obs:''};registrar('Vínculo com o PNCP',key,key,'sugestão',ok?'confirmado':'descartado',D=>{D.vinc[key]=v;});
+}
+function hist(){
+  const A=(S.aud||[]).slice().reverse();const q=(S.hq||'').toLowerCase();
+  const L=A.filter(a=>!q||JSON.stringify(a).toLowerCase().includes(q));
+  return `<div class="row"><input id="hq" placeholder="Buscar por DFD, pessoa ou texto" value="${esc(S.hq||'')}"><button class="s" id="hx">Exportar histórico (CSV)</button><span class="sub">${L.length} de ${A.length} registros</span></div>
+  <div class="tw"><table><thead><tr><th>Data e hora</th><th>Quem</th><th>Ação</th><th>Item</th><th>De</th><th>Para</th><th>Justificativa</th></tr></thead><tbody>${L.slice(0,500).map(a=>`<tr><td>${fmtDT(a.at)}</td><td>${esc(a.uid)}</td><td>${esc(a.acao)}</td><td>${esc(a.ref)}</td><td>${esc(a.antes)}</td><td>${esc(a.depois)}</td><td>${esc(a.just)}</td></tr>`).join('')||'<tr><td colspan="7" class="sub">Nenhuma alteração registrada ainda.</td></tr>'}</tbody></table></div>`;
 }
 function cfg(){
   const c=Store.cfg;
@@ -412,7 +445,7 @@ function dados(){
   <div class="row"><button class="p" id="exp" ${d?'':'disabled'}>Baixar CSV adequado</button><button class="s" id="expn" ${d?'':'disabled'}>Baixar itens enviados ao PCA ${S.ano+1}</button><button class="s" id="expr" ${d?'':'disabled'}>Baixar relatório de apontamentos</button></div></div>`;
 }
 function bind(){
-  const cs=$('#c_save');if(cs)cs.onclick=async()=>{LS.set('gh_nome',$('#c_nome').value.trim());LS.set('gh_repo',$('#c_repo').value.trim());LS.set('gh_path',$('#c_path').value.trim()||'decisoes.json');LS.set('gh_token',$('#c_tok').value.trim());Object.assign(Store.cfg,{nome:$('#c_nome').value.trim(),repo:$('#c_repo').value.trim(),path:$('#c_path').value.trim()||'decisoes.json',token:$('#c_tok').value.trim()});S.msg='Configuração salva.';await Store.load();draw();};
+  const hq=$('#hq');if(hq)hq.oninput=()=>{S.hq=hq.value;draw();const n=$('#hq');if(n){n.focus();n.setSelectionRange(n.value.length,n.value.length);}};const hx=$('#hx');if(hx)hx.onclick=()=>{const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';save('historico_pca.csv','\ufeff'+['Data;Quem;Acao;Item;De;Para;Justificativa'].concat((S.aud||[]).map(a=>[a.at,a.uid,a.acao,a.ref,a.antes,a.depois,a.just].map(q).join(';'))).join('\n'));};const cs=$('#c_save');if(cs)cs.onclick=async()=>{LS.set('gh_nome',$('#c_nome').value.trim());LS.set('gh_repo',$('#c_repo').value.trim());LS.set('gh_path',$('#c_path').value.trim()||'decisoes.json');LS.set('gh_token',$('#c_tok').value.trim());Object.assign(Store.cfg,{nome:$('#c_nome').value.trim(),repo:$('#c_repo').value.trim(),path:$('#c_path').value.trim()||'decisoes.json',token:$('#c_tok').value.trim()});S.msg='Configuração salva.';await Store.load();draw();};
   const cc=$('#c_clear');if(cc)cc.onclick=()=>{LS.set('gh_token','');Store.cfg.token='';S.msg='Token removido deste navegador.';draw();};
   ['fsev','freg','fst','pst','fdest'].forEach(k=>{const e=$('#'+k);if(e)e.onchange=()=>{S[k]=e.value;draw();};});
   const q=$('#q');if(q)q.oninput=()=>{S.q=q.value;clearTimeout(window._t);window._t=setTimeout(()=>{draw();const n=$('#q');n.focus();n.setSelectionRange(99,99);},250);};
@@ -433,12 +466,12 @@ function treat(cid,r){
   dlg.showModal();$('#d4').onclick=()=>dlg.close();$('#d3').onclick=()=>{setStatus(cid,r,$('#d1').value,$('#d2').value);dlg.close();};
 }
 function edit(cid){
-  const c=allCs().find(x=>x.id==cid),o=(S.ov[cid]||{}).f||{};const F=[['num','Número'],['titulo','Título'],['ini','Início (dd/mm/aaaa)'],['fim','Conclusão (dd/mm/aaaa)'],['prazo','Prazo (dias)'],['area','Área requisitante'],['prioridade','Prioridade']];
-  const dlg=$('#dlg');dlg.innerHTML=`<h3>Adequar ${esc(c.num)}</h3><p class="sub">Original → o valor editado entra no CSV exportado.</p>`+F.map(f=>`<label>${f[1]} <span class="sub">(original: ${esc(c[f[0]])})</span></label><input data-f="${f[0]}" value="${esc(o[f[0]]??c[f[0]])}">`).join('')+`<div class="row" style="margin-top:12px"><button class="p" id="d3">Salvar</button><button class="s" id="d4">Cancelar</button></div>`;
+  const c=allCs().find(x=>x.id==cid),o=(S.ov[cid]||{}).f||{};const F=[['titulo','Título'],['ini','Início (dd/mm/aaaa)'],['fim','Conclusão (dd/mm/aaaa)'],['prazo','Prazo (dias)'],['area','Área requisitante'],['prioridade','Prioridade']];
+  const dlg=$('#dlg');dlg.innerHTML=`<h3>Adequar ${esc(c.num)}</h3><p class="sub">Original → o valor editado entra no CSV exportado.</p><label>Número do DFD <span class="sub">(não editável)</span></label><input value="${esc(c.num)}" disabled>`+F.map(f=>`<label>${f[1]} <span class="sub">(original: ${esc(c[f[0]])})</span></label><input data-f="${f[0]}" value="${esc(o[f[0]]??c[f[0]])}">`).join('')+`<div class="row" style="margin-top:12px"><button class="p" id="d3">Salvar</button><button class="s" id="d4">Cancelar</button></div>`;
   dlg.showModal();$('#d4').onclick=()=>dlg.close();
   $('#d3').onclick=()=>{const f={};dlg.querySelectorAll('[data-f]').forEach(i=>{if(i.value.trim()!==c[i.dataset.f])f[i.dataset.f]=i.value.trim();});
     if(f.fim&&!Core.pdate(f.fim)){S.msg='Data de conclusão inválida.';dlg.close();draw();return;}if(f.ini&&!Core.pdate(f.ini)){S.msg='Data de início inválida.';dlg.close();draw();return;}
-    saveOv(cid,f);dlg.close();};
+    dlg.close();if(!Object.keys(f).length){return;}saveOv(cid,f);};
 }
 init();
 </script>
