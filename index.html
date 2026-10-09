@@ -29,6 +29,7 @@ button.p{background:var(--ac);color:#fff;border-color:var(--ac);cursor:pointer}b
 .msg.warn{background:#fdf1d8;color:#6b4300}.msg{padding:8px 12px;border-radius:8px;background:var(--ac2);margin-bottom:10px;font-size:13px}
 dialog{border:1px solid var(--bd);border-radius:12px;background:var(--card);color:var(--tx);max-width:560px;width:calc(100% - 32px)}
 dialog label{display:block;margin:8px 0 2px;font-size:12px;color:var(--mut)}dialog input,dialog select,dialog textarea{width:100%}
+.chip{border-radius:99px}.chip b{margin-left:4px;color:var(--ac)}
 @media(max-width:600px){.w{padding:12px}}
 </style>
 <div class="w" id="app"></div>
@@ -229,28 +230,37 @@ const stOf=v=>(S.aj[ajId(v.cid,v.regra)]||{}).status||'pendente';
 const LS={get(k){try{return localStorage.getItem(k)||''}catch(e){return ''}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
 const guess=(()=>{const m=location.hostname.match(/^([^.]+)\.github\.io$/),p=location.pathname.split('/').filter(Boolean);return m&&p[0]?m[1]+'/'+p[0]:'';})();
 const Store={
-  cfg:{token:LS.get('gh_token'),repo:LS.get('gh_repo')||guess,path:LS.get('gh_path')||'decisoes.json',nome:LS.get('gh_nome')},
-  data:{ajustes:{},ov:{},destino:{},vinc:{},auditoria:[]},sha:null,
-  get canWrite(){return !!(this.cfg.token&&this.cfg.repo);},
+  cfg:{token:LS.get('gh_token'),repo:LS.get('gh_repo')||guess||'Fundacao-Florestal/pca',path:'decisoes.json',branch:'dados'},me:null,
+  data:{ajustes:{},ov:{},destino:{},vinc:{},auditoria:[],propostas:[]},sha:null,
+  get canWrite(){return !!(this.cfg.token&&this.cfg.repo&&this.me&&this.me.push);},
+  async entrar(){
+    this.me=null;if(!this.cfg.token)return;
+    try{const h=this.hdr();const u=await fetch('https://api.github.com/user',{headers:h});
+      if(!u.ok){S.msg=u.status===401?'Token inválido ou expirado. Gere outro em Configurações.':'Não consegui validar o token ('+u.status+').';return;}
+      const uj=await u.json();const r=await fetch('https://api.github.com/repos/'+this.cfg.repo,{headers:h});const rj=r.ok?await r.json():{};
+      this.me={login:uj.login,name:uj.name||uj.login,push:!!(rj.permissions&&(rj.permissions.push||rj.permissions.admin||rj.permissions.maintain)),admin:!!(rj.permissions&&rj.permissions.admin)};
+    }catch(e){S.msg='Falha de rede ao validar o acesso.';}
+  },
   url(){return 'https://api.github.com/repos/'+this.cfg.repo+'/contents/'+this.cfg.path.split('/').map(encodeURIComponent).join('/');},
+  raw(){return 'https://raw.githubusercontent.com/'+this.cfg.repo+'/'+this.cfg.branch+'/'+this.cfg.path;},
   hdr(){return {Accept:'application/vnd.github+json',Authorization:'Bearer '+this.cfg.token};},
   async load(){
     let j=null;
     try{
-      if(this.canWrite){const r=await fetch(this.url()+'?t='+Date.now(),{headers:this.hdr()});
+      if(this.canWrite){const r=await fetch(this.url()+'?ref='+this.cfg.branch+'&t='+Date.now(),{headers:this.hdr()});
         if(r.ok){const o=await r.json();this.sha=o.sha;j=JSON.parse(decodeURIComponent(escape(atob(o.content.replace(/\n/g,'')))));}
         else if(r.status===404){this.sha=null;j={};}
         else throw new Error('GitHub respondeu '+r.status+' ao ler as decisões (confira repositório e token).');}
-      else{const r=await fetch('decisoes.json?t='+Date.now());if(r.ok)j=await r.json();}
+      else{let r=await fetch(this.raw()+'?t='+Date.now()).catch(()=>null);if(!r||!r.ok)r=await fetch('decisoes.json?t='+Date.now());if(r&&r.ok)j=await r.json();}
     }catch(e){S.msg=e.message||'Falha ao ler decisões.';}
-    if(j){this.data={ajustes:j.ajustes||{},ov:j.ov||{},destino:j.destino||{},vinc:j.vinc||{},auditoria:j.auditoria||[]};}
-    S.aj=this.data.ajustes;S.ov=this.data.ov;S.dest=this.data.destino;S.vinc=this.data.vinc;S.aud=this.data.auditoria;
+    if(j){this.data={ajustes:j.ajustes||{},ov:j.ov||{},destino:j.destino||{},vinc:j.vinc||{},auditoria:j.auditoria||[],propostas:j.propostas||[]};}
+    S.aj=this.data.ajustes;S.ov=this.data.ov;S.dest=this.data.destino;S.vinc=this.data.vinc;S.aud=this.data.auditoria;S.prop=this.data.propostas;
   },
   async mutate(fn){
-    if(!this.canWrite){S.msg='Modo leitura: informe o token do GitHub em Configurações para salvar decisões.';draw();return false;}
+    if(!this.canWrite){S.msg='Modo consulta: entre com seu acesso aprovado (Configurações) para registrar decisões.';draw();return false;}
     for(let t=0;t<3;t++){
-      fn(this.data);S.aj=this.data.ajustes;S.ov=this.data.ov;S.dest=this.data.destino;S.vinc=this.data.vinc;S.aud=this.data.auditoria;draw();
-      const body={message:'Decisão registrada por '+(this.cfg.nome||'equipe'),content:btoa(unescape(encodeURIComponent(JSON.stringify(this.data,null,1))))};
+      fn(this.data);S.aj=this.data.ajustes;S.ov=this.data.ov;S.dest=this.data.destino;S.vinc=this.data.vinc;S.aud=this.data.auditoria;S.prop=this.data.propostas;draw();
+      const body={branch:this.cfg.branch,message:'Decisão registrada por '+(this.me?this.me.login:'equipe'),content:btoa(unescape(encodeURIComponent(JSON.stringify(this.data,null,1))))};
       if(this.sha)body.sha=this.sha;
       try{const r=await fetch(this.url(),{method:'PUT',headers:{...this.hdr(),'Content-Type':'application/json'},body:JSON.stringify(body)});
         if(r.ok){const o=await r.json();this.sha=o.content.sha;return true;}
@@ -261,14 +271,14 @@ const Store={
     return false;
   }
 };
-const who=()=>Store.cfg.nome||'';
+const who=()=>Store.me?Store.me.login:'';
 /* Registro de alterações: exige identificação e justificativa; tudo fica no histórico (auditoria). */
 const JUST_MIN=10;
-function justificar(titulo,antes,depois){
+function justificar(titulo,antes,depois,rot){
   return new Promise(res=>{
     const d=$('#dj');
     d.innerHTML=`<h3>Justificativa obrigatória</h3><p><b>${esc(titulo)}</b></p>${antes!==undefined?`<p class="sub">De: ${esc(antes||'—')}<br>Para: ${esc(depois||'—')}</p>`:''}
-    <label>Por que você está fazendo esta alteração? (mínimo ${JUST_MIN} caracteres)</label><textarea id="jt" rows="3"></textarea><div class="sub" id="je" style="color:var(--crit)"></div>
+    <label>${esc(rot||'Por que você está fazendo esta alteração?')} (mínimo ${JUST_MIN} caracteres)</label><textarea id="jt" rows="3"></textarea><div class="sub" id="je" style="color:var(--crit)"></div>
     <p class="sub">Registrado em nome de <b>${esc(who())}</b>, com data e hora.</p>
     <div class="row" style="margin-top:12px"><button class="p" id="jok">Confirmar</button><button class="s" id="jno">Cancelar</button></div>`;
     d.showModal();let feito=false;const fim=v=>{if(feito)return;feito=true;d.close();res(v);};
@@ -276,11 +286,62 @@ function justificar(titulo,antes,depois){
     $('#jok').onclick=()=>{const t=$('#jt').value.trim();if(t.length<JUST_MIN){$('#je').textContent='Escreva a justificativa (mínimo '+JUST_MIN+' caracteres).';return;}fim(t);};
   });
 }
-async function registrar(acao,cid,rotulo,antes,depois,fn){
-  if(!Store.canWrite||!who()){S.msg='Para alterar, é preciso estar identificado e com acesso aprovado (aba Configurações). Sem isso o painel é só para consulta.';draw();return false;}
+const EMAIL_NGI='ngi@fflorestal.sp.gov.br'; /* e-mail que recebe as propostas */
+const rid=()=>Math.random().toString(36).slice(2,8)+Date.now().toString(36).slice(-4);
+function aplicar(D,ap){
+  const at=new Date().toISOString();
+  if(ap.t==='dest')D.destino[ap.cid]={d:ap.v,uid:ap.por||'',at};
+  else if(ap.t==='ov'){const f={...ap.v};delete f.num;D.ov[ap.cid]={f};}
+  else if(ap.t==='aj')D.ajustes[ap.id]={...ap.v,uid:ap.por||ap.v.uid};
+  else if(ap.t==='vinc')D.vinc[ap.key]=ap.v;
+}
+async function registrar(acao,cid,rotulo,antes,depois,ap){
+  const c=allCs().find(x=>x.id==cid)||{};
+  const base={acao,cid,ref:rotulo,ano:c.ano||'',titulo:c.titulo||'',area:c.area||'',antes:antes||'',depois:depois||'',ap};
+  if(!Store.canWrite)return proporAlteracao(base);
   const j=await justificar(acao+' · '+rotulo,antes,depois);
   if(j===null){draw();return false;}
-  return Store.mutate(D=>{fn(D);(D.auditoria=D.auditoria||[]).push({at:new Date().toISOString(),uid:who(),acao,cid,ref:rotulo,antes:antes||'',depois:depois||'',just:j});});
+  ap.por=who();
+  return Store.mutate(D=>{aplicar(D,ap);(D.auditoria=D.auditoria||[]).push({at:new Date().toISOString(),uid:who(),acao,cid,ref:rotulo,antes:antes||'',depois:depois||'',just:j});});
+}
+/* Quem não tem acesso de validação PROPÕE: nada muda nos dados; a proposta segue por e-mail para a coordenação. */
+function proporAlteracao(base){
+  return new Promise(res=>{
+    const d=$('#dj');const n=LS.get('prop_nome'),st=LS.get('prop_setor'),em=LS.get('prop_email');
+    d.innerHTML=`<h3>Propor alteração</h3><p><b>${esc(base.acao)} · ${esc(base.ref)}</b></p><p class="sub">De: ${esc(base.antes||'—')}<br>Para: ${esc(base.depois||'—')}</p>
+    <p class="sub">Sua proposta <b>não altera</b> o painel agora: ela é registrada em seu nome e segue para validação da coordenação.</p>
+    <label>Seu nome</label><input id="pn" value="${esc(n)}"><label>Setor</label><input id="ps" value="${esc(st)}"><label>E-mail institucional</label><input id="pe" value="${esc(em)}">
+    <label>Justificativa da proposta (mínimo ${JUST_MIN} caracteres)</label><textarea id="jt" rows="3"></textarea><div class="sub" id="je" style="color:var(--crit)"></div>
+    <div class="row" style="margin-top:12px"><button class="p" id="pm">Enviar proposta por e-mail</button><button class="s" id="pc">Copiar proposta</button><button class="s" id="jno">Cancelar</button></div>`;
+    d.showModal();let feito=false;const fim=v=>{if(feito)return;feito=true;d.close();res(v);};
+    const montar=()=>{const nome=$('#pn').value.trim(),setor=$('#ps').value.trim(),email=$('#pe').value.trim(),j=$('#jt').value.trim();
+      if(!nome||!setor||!/^\S+@\S+\.\S+$/.test(email)){$('#je').textContent='Informe nome, setor e um e-mail válido.';return null;}
+      if(j.length<JUST_MIN){$('#je').textContent='Escreva a justificativa (mínimo '+JUST_MIN+' caracteres).';return null;}
+      LS.set('prop_nome',nome);LS.set('prop_setor',setor);LS.set('prop_email',email);
+      const p={id:rid(),at:new Date().toISOString(),prop:{nome,setor,email},...base,just:j,status:'pendente'};
+      const cod=btoa(unescape(encodeURIComponent(JSON.stringify(p))));
+      const txt=`Proposta de alteração do PCA\nProponente: ${nome} (${setor}) · ${email}\nItem: ${base.ref}${base.titulo?' · '+base.titulo:''}\nAção: ${base.acao}\nDe: ${base.antes||'—'}\nPara: ${base.depois||'—'}\nJustificativa: ${j}\n\n[[PCA-PROPOSTA]]${cod}[[/PCA-PROPOSTA]]`;
+      return {p,txt};};
+    $('#jno').onclick=()=>fim(false);d.oncancel=()=>fim(false);
+    $('#pm').onclick=()=>{const m=montar();if(!m)return;window.location.href='mailto:'+EMAIL_NGI+'?subject='+encodeURIComponent('[PCA] Proposta '+base.ref+' · '+m.p.prop.nome)+'&body='+encodeURIComponent(m.txt);S.msg='Proposta preparada: envie o e-mail que abriu para a coordenação.';fim(true);draw();};
+    $('#pc').onclick=async()=>{const m=montar();if(!m)return;try{await navigator.clipboard.writeText(m.txt);S.msg='Proposta copiada. Cole em um e-mail para a coordenação.';}catch(e){S.msg='Não consegui copiar automaticamente.';}fim(true);draw();};
+  });
+}
+async function validar(id,dec){
+  if(!Store.canWrite){S.msg='Somente quem tem acesso de validação pode aprovar ou recusar.';draw();return;}
+  const p=(S.prop||[]).find(x=>x.id===id);if(!p)return;
+  const j=await justificar((dec==='aprovada'?'Aprovar':'Recusar')+' proposta · '+p.ref,p.antes,p.depois,'Comentário da validação');
+  if(j===null)return;
+  await Store.mutate(D=>{const q=D.propostas.find(x=>x.id===id);if(!q)return;const at=new Date().toISOString();q.status=dec;q.val={uid:who(),at,coment:j};
+    if(dec==='aprovada')aplicar(D,{...q.ap,por:q.prop.nome+' (validado por '+who()+')'});
+    (D.auditoria=D.auditoria||[]).push({at,uid:who(),acao:'Validação: '+dec,cid:q.cid,ref:q.ref,antes:q.antes,depois:q.depois,just:j,prop:q.prop.nome+' · '+q.prop.setor,pjust:q.just});});
+}
+async function importarProps(txt){
+  const re=/\[\[PCA-PROPOSTA\]\]([A-Za-z0-9+\/=\s]+?)\[\[\/PCA-PROPOSTA\]\]/g;const novos=[];let m;
+  while((m=re.exec(txt))){try{novos.push(JSON.parse(decodeURIComponent(escape(atob(m[1].replace(/\s/g,''))))));}catch(e){}}
+  if(!novos.length){S.msg='Não encontrei propostas no texto colado.';draw();return;}
+  let add=0;await Store.mutate(D=>{D.propostas=D.propostas||[];novos.forEach(p=>{if(p&&p.id&&!D.propostas.some(x=>x.id===p.id)){D.propostas.push(p);add++;}});});
+  S.msg=add+' proposta(s) importada(s)'+(novos.length-add?', '+(novos.length-add)+' já existiam':'')+'.';draw();
 }
 
 async function getText(path){const r=await fetch(path+'?t='+Date.now());if(!r.ok)return null;return await r.text();}
@@ -300,6 +361,7 @@ async function loadPCAFolder(){
 }
 async function init(){
   draw();
+  await Store.entrar();
   await Store.load();
   await Promise.all([loadPNCP(),loadPCAFolder()]);
   if(!S.ds[S.ano]&&S.ds[2027])S.ano=2027;
@@ -313,13 +375,13 @@ async function onFile(f,ano){
 async function setStatus(cid,regra,status,obs){
   const id=ajId(cid,regra);const d={cid,regra,status,obs:obs||'',uid:who(),at:new Date().toISOString()};
   const c=allCs().find(x=>x.id==cid);const ant=(S.aj[id]||{}).status||'pendente';
-  await registrar('Apontamento',cid,(c?c.num:cid)+' · '+regra,ST[ant]||ant,ST[status]||status,D=>{D.ajustes[id]=d;});
+  await registrar('Apontamento',cid,(c?c.num:cid)+' · '+regra,ST[ant]||ant,ST[status]||status,{t:'aj',id,v:d});
 }
 async function saveOv(cid,f){
   delete f.num; /* o número do DFD não é editável */
   const c=allCs().find(x=>x.id==cid),ant=(S.ov[cid]||{}).f||{};
   const fmt=o=>Object.keys(o).map(k=>k+': '+o[k]).join('; ');
-  await registrar('Edição de dados',cid,c?c.num:cid,fmt(ant),fmt(f),D=>{D.ov[cid]={f};});
+  await registrar('Edição de dados',cid,c?c.num:cid,fmt(ant),fmt(f),{t:'ov',cid,v:f});
 }
 function sevTag(s){return `<span class="tag ${s}">${{crit:'Crítico',med:'Médio',baixa:'Baixo'}[s]}</span>`}
 const ovF=()=>{const o={};Object.keys(S.ov).forEach(k=>{const f={...(S.ov[k].f||{})};delete f.num;o[k]=f;});return o;};
@@ -329,11 +391,11 @@ const allVals=()=>yrs().flatMap(a=>S.val[a]||[]);
 const allCs=()=>yrs().flatMap(a=>S.ds[a].cs);
 const destOf=c=>(S.dest[c.id]||{}).d||'';
 function destSel(c){return `<select data-dest="${esc(c.id)}">${Object.keys(DEST).map(k=>`<option value="${k}" ${destOf(c)==k?'selected':''}>${k=='manter'?'Manter em '+c.ano:k=='proximo'?'Enviar ao PCA '+(c.ano+1):DEST[k]}</option>`).join('')}</select>`}
-async function setDest(c,d){const x={d,uid:who(),at:new Date().toISOString()};await registrar('Destino do item',c.id,c.num,DEST[destOf(c)]||'A definir',DEST[d]||d,D=>{D.destino[c.id]=x;});}
+async function setDest(c,d){const x={d,uid:who(),at:new Date().toISOString()};await registrar('Destino do item',c.id,c.num,DEST[destOf(c)]||'A definir',DEST[d]||d,{t:'dest',cid:c.id,v:d});}
 function fmtDT(s){if(!s)return '—';const d=new Date(s);return isNaN(d)?s:d.toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'});}
 function draw(){
   const d=cur(),v=vals();
-  const tabs=[['painel','Painel'],['pend','Pendências'],['contr','Contratações'],['cruz','Cruzamento 2026×2027'],['pncp','Situação no PNCP'],['dados','Importar / Exportar'],['hist','Histórico'],['cfg','Configurações']];
+  const tabs=[['painel','Painel'],['pend','Pendências'],['contr','Contratações'],['cruz','Cruzamento 2026×2027'],['pncp','Situação no PNCP'],['a26','Análise 2026'],['prop','Propostas'+((S.prop||[]).filter(p=>p.status==='pendente').length?' ('+(S.prop||[]).filter(p=>p.status==='pendente').length+')':'')],['dados','Importar / Exportar'],['hist','Histórico'],['cfg','Configurações']];
   if(S.ano==='todos'&&!['pend','contr','pncp'].includes(S.tab))S.ano=2026;
   const age=S.pn&&S.pn.coletado?(Date.now()-new Date(S.pn.coletado))/864e5:null;
   let h=`<header><div><h1>Validação e adequação do PCA</h1><div class="sub">Fundação Florestal · NGI coordena, NCP consolida</div></div>
@@ -342,7 +404,7 @@ function draw(){
   if(S.msg)h+=`<div class="msg">${esc(S.msg)}</div>`;
   h+=`<nav>${tabs.map(t=>`<button data-t="${t[0]}" class="${S.tab==t[0]?'on':''}">${t[1]}</button>`).join('')}</nav>`;
   if(!yrs().length&&S.tab!='dados'&&S.tab!='cfg')h+=`<div class="box">PCA ${S.ano} ainda não está no repositório. Envie <code>pca_${S.ano}.csv</code> ao repositório e rode a rotina em Actions (ou espere a próxima execução).</div>`;
-  else h+=({painel,pend,contr,cruz,pncp,dados,hist,cfg}[S.tab])();
+  else h+=({painel,pend,contr,cruz,pncp,a26,prop,dados,hist,cfg}[S.tab])();
   $('#app').innerHTML=h;
   $('#ano').onchange=e=>{S.ano=e.target.value==='todos'?'todos':+e.target.value;draw();};
   document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{S.tab=b.dataset.t;draw();});
@@ -418,24 +480,77 @@ function pncp(){
 }
 function decideVinc(key,ok){
   const [ano,num]=[+key.split(':')[0],key.slice(5)];const r=Core.cruzarPNCP(S.ds[ano],S.pn.rows,S.vinc).find(x=>x.num===num);if(!r)return;
-  const v=ok?{conf:'confirmada',ids:r.ids,obs:'Confirmada pela equipe.'}:{conf:'descartada',ids:[],obs:''};registrar('Vínculo com o PNCP',key,key,'sugestão',ok?'confirmado':'descartado',D=>{D.vinc[key]=v;});
+  const v=ok?{conf:'confirmada',ids:r.ids,obs:'Confirmada pela equipe.'}:{conf:'descartada',ids:[],obs:''};registrar('Vínculo com o PNCP',key,key,'sugestão',ok?'confirmado':'descartado',{t:'vinc',key,v});
+}
+/* ===== Análise 2026: tudo do PCA 2026 e das contratações de 2026 em uma única tela ===== */
+const SIT26=['Contratada (homologada)','Publicada, sem homologação','Sem contratação localizada','Contratada/publicada sem item no PCA'];
+function linhas26(){
+  const ds=S.ds[2026];if(!ds||!S.pn)return null;const P=S.pn.rows;const hoje=new Date();
+  const cr=Core.cruzarPNCP(ds,P,S.vinc);const usados=new Set();cr.forEach(r=>r.ids.forEach(i=>usados.add(i)));
+  const byid={};P.forEach(p=>byid[p.id]=p);const vals=S.val[2026]||[];
+  const propPend={};(S.prop||[]).forEach(p=>{if(p.status==='pendente')propPend[p.cid]=(propPend[p.cid]||0)+1;});
+  const out=[];
+  cr.forEach(r=>{const c=ds.cs.find(x=>x.num===r.num);if(!c)return;
+    const ab=vals.filter(v=>v.cid===c.id&&((S.aj[ajId(c.id,v.regra)]||{}).status||'pendente')==='pendente');
+    const crit=ab.filter(v=>v.sev==='crit').length;const sit=r.status==='Sem publicação localizada'?'Sem contratação localizada':r.status;
+    const d0=Core.pdate(c.ini);const atras=sit==='Sem contratação localizada'&&d0&&d0<hoje;
+    const dest=destOf(c);const sug=r.conf==='sugestão';
+    const motivos=[];if(sit==='Sem contratação localizada'&&!dest)motivos.push('definir destino');if(sug)motivos.push('confirmar vínculo com o PNCP');if(crit)motivos.push('pendência crítica');if(propPend[c.id])motivos.push('proposta aguardando validação');
+    out.push({tipo:'PCA',c,cid:c.id,num:c.num,titulo:c.titulo,area:c.area,pri:c.prioridade,ini:c.ini,fim:c.fim,vpca:r.pca,sit,conf:r.conf,atras:!!atras,pubs:r.ids.map(i=>byid[i]),vest:r.est,vhom:r.hom,pen:ab.length,crit,dest,motivos});});
+  P.filter(p=>String(p.ano)==='2026'&&!usados.has(p.id)).forEach(p=>{
+    out.push({tipo:'Só PNCP',c:null,cid:p.id,num:p.numero+'/'+p.ano,titulo:p.objeto,area:'',pri:'',ini:'',fim:'',vpca:0,sit:'Contratada/publicada sem item no PCA',conf:'',atras:false,pubs:[p],vest:p.est,vhom:p.sit==='Anulada'?0:p.hom,pen:0,crit:0,dest:'',motivos:['regularizar: sem item no PCA']});});
+  return out;
+}
+const F26={tudo:{},contratado:{sit:'Contratada (homologada)'},sempca:{sit:'Contratada/publicada sem item no PCA'},decisao:{dec:'1'},atrasado:{atr:'1'},semcontr:{sit:'Sem contratação localizada'}};
+function a26(){
+  const R=linhas26();if(!R)return '<div class="box">Aguardando os dados do PCA 2026 e do PNCP. Toque em Recarregar.</div>';
+  const f=S.f26||{};const q=(f.q||'').toLowerCase();
+  const L=R.filter(r=>(!f.sit||r.sit===f.sit)&&(!f.dest||(f.dest==='_'?r.tipo==='PCA'&&!r.dest:r.dest===f.dest))&&(!f.dec||(f.dec==='1'?r.motivos.length>0:!r.motivos.length))&&(!f.pen||(f.pen==='c'?r.crit>0:f.pen==='p'?r.pen>0:r.pen===0))&&(!f.area||r.area===f.area)&&(!f.pri||r.pri===f.pri)&&(!f.atr||r.atras)&&(!q||JSON.stringify([r.num,r.titulo,r.area,r.pubs.map(p=>p.mod+p.numero+p.objeto)]).toLowerCase().includes(q)));
+  const n=k=>R.filter(r=>r.sit===k).length;const soma=(a,k)=>a.reduce((t,r)=>t+(r[k]||0),0);
+  const areas=[...new Set(R.map(r=>r.area).filter(Boolean))].sort(),pris=[...new Set(R.map(r=>r.pri).filter(Boolean))];
+  const chip=(k,t,cnt)=>`<button class="s chip" data-f26="${k}">${t} <b>${cnt}</b></button>`;
+  const sel=(id,t,opts)=>`<select data-a26="${id}"><option value="">${t}</option>${opts.map(o=>`<option value="${esc(o[0])}" ${f[id]==o[0]?'selected':''}>${esc(o[1])}</option>`).join('')}</select>`;
+  const pca=R.filter(r=>r.tipo==='PCA');
+  return `<p class="sub">Tudo de 2026 em uma tela: os ${pca.length} itens do PCA 2026 cruzados com as contratações publicadas pela Fundação no PNCP em 2026 (coleta de ${fmtDT(S.pn.coletado)}). "Sem contratação localizada" não prova que não houve contratação: confira antes de cancelar.</p>
+  <div class="cards"><div class="c"><b>${pca.length}</b><span>itens no PCA 2026 · ${brl(soma(pca,'vpca'))}</span></div><div class="c"><b>${n(SIT26[0])}</b><span>contratados (homologados) · ${brl(soma(R.filter(r=>r.sit===SIT26[0]),'vhom'))}</span></div><div class="c"><b>${n(SIT26[1])}</b><span>publicados, sem homologação</span></div><div class="c"><b>${n(SIT26[2])}</b><span>sem contratação localizada · ${brl(soma(R.filter(r=>r.sit===SIT26[2]),'vpca'))}</span></div><div class="c"><b>${n(SIT26[3])}</b><span>contratados/publicados sem PCA</span></div><div class="c"><b>${R.filter(r=>r.motivos.length).length}</b><span>precisam de decisão</span></div></div>
+  <div class="row">${chip('tudo','Tudo',R.length)}${chip('contratado','Contratado',n(SIT26[0]))}${chip('sempca','Contratado sem PCA',n(SIT26[3]))}${chip('semcontr','Sem contratação',n(SIT26[2]))}${chip('atrasado','Início já passou, sem contratação',R.filter(r=>r.atras).length)}${chip('decisao','Precisa de decisão',R.filter(r=>r.motivos.length).length)}</div>
+  <div class="row">${sel('sit','Situação: todas',SIT26.map(x=>[x,x]))}${sel('dest','Destino: todos',[['_','A definir'],['manter','Manter no ano'],['proximo','Enviar ao PCA 2027'],['cancelar','Cancelar']])}${sel('pen','Pendências: todas',[['c','Com pendência crítica'],['p','Com alguma pendência'],['0','Sem pendência']])}${sel('area','Área: todas',areas.map(x=>[x,x]))}${sel('pri','Prioridade: todas',pris.map(x=>[x,x]))}<input data-a26="q" placeholder="Buscar" value="${esc(f.q||'')}" style="min-width:180px"><button class="s" id="x26">Exportar planilha (CSV)</button><span class="sub">${L.length} linhas</span></div>
+  <div class="tw"><table><thead><tr><th>Origem</th><th>Nº</th><th>Título / objeto</th><th>Área · prioridade</th><th>Início → conclusão previstos</th><th>Valor PCA</th><th>Situação em 2026</th><th>No PNCP</th><th>Pend.</th><th>Destino</th><th>Precisa de</th></tr></thead><tbody>${L.slice(0,400).map(r=>`<tr><td>${r.tipo==='PCA'?'PCA':'<span class="tag med">Só PNCP</span>'}</td><td><b>${esc(r.num)}</b></td><td>${esc(r.titulo)}</td><td>${esc(r.area)}<br><span class="sub">${esc(r.pri)}</span></td><td>${esc(r.ini)}${r.ini?' → '+esc(r.fim):''}${r.atras?'<br><span class="tag crit">início passou</span>':''}</td><td>${r.tipo==='PCA'?brl(r.vpca):'—'}</td><td class="${r.sit[0]==='C'&&r.tipo==='PCA'?'ok':r.sit[0]==='P'?'med':r.tipo==='Só PNCP'?'med':''}">${r.sit}${r.conf?'<br><span class="sub">vínculo '+r.conf+'</span>':''}</td><td>${r.pubs.length?r.pubs.map(p=>`<span class="sub">${esc(p.mod)} ${esc(p.numero)}/${esc(p.ano)}</span><br>${p.hom?'homologado '+brl(p.hom):'estimado '+brl(p.est)}`).join('<hr style="border:0;border-top:1px solid var(--bd)">'):'<span class="sub">—</span>'}</td><td>${r.pen?(r.crit?`<span class="tag crit">${r.crit} crít.</span> `:'')+r.pen:'—'}</td><td>${r.tipo==='PCA'?destSel(r.c):'<span class="sub">—</span>'}${r.tipo==='PCA'?`<br><button class="s" data-ed="${esc(r.cid)}">Adequar</button>`:''}</td><td>${r.motivos.length?'<span class="sub">'+r.motivos.map(esc).join('<br>')+'</span>':'<span class="ok">—</span>'}</td></tr>`).join('')}</tbody></table></div>${L.length>400?`<p class="sub">Mostrando 400 de ${L.length}: use os filtros ou exporte a planilha.</p>`:''}`;
+}
+function x26(){
+  const R=linhas26();if(!R)return;const f=S.f26||{};
+  const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+  const c=['Origem','Nº','Título/objeto','Área','Prioridade','Início previsto','Conclusão prevista','Valor PCA','Situação em 2026','Vínculo','Publicações no PNCP','Valor homologado PNCP','Pendências em aberto','Pendências críticas','Destino','Precisa de'];
+  const L=[c.join(';')].concat(R.map(r=>[r.tipo,r.num,r.titulo,r.area,r.pri,r.ini,r.fim,r.vpca,r.sit,r.conf,r.pubs.map(p=>p.mod+' '+p.numero+'/'+p.ano).join(' | '),r.vhom,r.pen,r.crit,DEST[r.dest]||(r.tipo==='PCA'?'A definir':''),r.motivos.join(' | ')].map(q).join(';')));
+  save('analise_pca_2026.csv','﻿'+L.join('\n'));
+}
+function prop(){
+  const P=(S.prop||[]);const pf=S.pf||'pendente',q=(S.pq||'').toLowerCase();
+  const cnt=k=>P.filter(p=>p.status===k).length;
+  const L=P.filter(p=>(pf==='todas'||p.status===pf)&&(!q||JSON.stringify([p.prop,p.ref,p.titulo,p.area,p.just]).toLowerCase().includes(q))).slice().reverse();
+  const quem=new Set(P.map(p=>p.prop&&p.prop.email)).size;
+  const tg=s=>s==='pendente'?'<span class="tag med">Pendente</span>':s==='aprovada'?'<span class="tag ok">Aprovada</span>':'<span class="tag crit">Recusada</span>';
+  const pode=Store.canWrite;
+  return `<div class="cards"><div class="c"><b>${cnt('pendente')}</b><span>aguardando validação</span></div><div class="c"><b>${cnt('aprovada')}</b><span>aprovadas</span></div><div class="c"><b>${cnt('recusada')}</b><span>recusadas</span></div><div class="c"><b>${quem}</b><span>proponentes</span></div></div>
+  <div class="row"><select id="pf">${[['pendente','Pendentes'],['aprovada','Aprovadas'],['recusada','Recusadas'],['todas','Todas']].map(o=>`<option value="${o[0]}" ${pf==o[0]?'selected':''}>${o[1]}</option>`).join('')}</select><input id="pq" placeholder="Buscar por DFD, pessoa, setor ou texto" value="${esc(S.pq||'')}" style="min-width:260px"><button class="s" id="px">Exportar planilha (CSV)</button><span class="sub">${L.length} proposta(s)</span></div>
+  ${pode?`<details class="box"><summary><b>Importar propostas recebidas por e-mail</b></summary><p class="sub">Cole aqui o texto dos e-mails (pode colar vários de uma vez). O painel reconhece as propostas e ignora as repetidas.</p><textarea id="pi" rows="4" style="width:100%"></textarea><div class="row" style="margin-top:8px"><button class="p" id="pb">Importar</button></div></details>`:`<div class="msg">Modo consulta: para aprovar ou recusar, entre com o acesso de validação em Configurações.</div>`}
+  <div class="tw"><table><thead><tr><th>Recebida</th><th>Proponente</th><th>Item</th><th>O que muda</th><th>Justificativa do proponente</th><th>Situação</th><th>${pode?'Decisão':'Validação'}</th></tr></thead><tbody>${L.map(p=>`<tr><td>${fmtDT(p.at)}</td><td><b>${esc(p.prop.nome)}</b><br><span class="sub">${esc(p.prop.setor)}<br>${esc(p.prop.email)}</span></td><td><b>${esc(p.ref)}</b><br><span class="sub">${esc(p.titulo)}<br>${esc(p.area)}</span></td><td><span class="sub">${esc(p.acao)}</span><br>De: ${esc(p.antes||'—')}<br><b>Para: ${esc(p.depois||'—')}</b></td><td>${esc(p.just)}</td><td>${tg(p.status)}</td><td>${p.status==='pendente'?(pode?`<button class="p" data-pv="${p.id}|aprovada">Aprovar</button> <button class="s" data-pv="${p.id}|recusada">Recusar</button>`:'<span class="sub">—</span>'):`<span class="sub">${esc(p.val.uid)} · ${fmtDT(p.val.at)}<br>${esc(p.val.coment)}</span>`}</td></tr>`).join('')||'<tr><td colspan="7" class="sub">Nenhuma proposta neste filtro.</td></tr>'}</tbody></table></div>`;
 }
 function hist(){
   const A=(S.aud||[]).slice().reverse();const q=(S.hq||'').toLowerCase();
   const L=A.filter(a=>!q||JSON.stringify(a).toLowerCase().includes(q));
   return `<div class="row"><input id="hq" placeholder="Buscar por DFD, pessoa ou texto" value="${esc(S.hq||'')}"><button class="s" id="hx">Exportar histórico (CSV)</button><span class="sub">${L.length} de ${A.length} registros</span></div>
-  <div class="tw"><table><thead><tr><th>Data e hora</th><th>Quem</th><th>Ação</th><th>Item</th><th>De</th><th>Para</th><th>Justificativa</th></tr></thead><tbody>${L.slice(0,500).map(a=>`<tr><td>${fmtDT(a.at)}</td><td>${esc(a.uid)}</td><td>${esc(a.acao)}</td><td>${esc(a.ref)}</td><td>${esc(a.antes)}</td><td>${esc(a.depois)}</td><td>${esc(a.just)}</td></tr>`).join('')||'<tr><td colspan="7" class="sub">Nenhuma alteração registrada ainda.</td></tr>'}</tbody></table></div>`;
+  <div class="tw"><table><thead><tr><th>Data e hora</th><th>Quem</th><th>Ação</th><th>Item</th><th>De</th><th>Para</th><th>Justificativa</th></tr></thead><tbody>${L.slice(0,500).map(a=>`<tr><td>${fmtDT(a.at)}</td><td>${esc(a.uid)}${a.prop?'<br><span class="sub">proposta de '+esc(a.prop)+'</span>':''}</td><td>${esc(a.acao)}</td><td>${esc(a.ref)}</td><td>${esc(a.antes)}</td><td>${esc(a.depois)}</td><td>${esc(a.just)}${a.pjust?'<br><span class="sub">Proponente: '+esc(a.pjust)+'</span>':''}</td></tr>`).join('')||'<tr><td colspan="7" class="sub">Nenhuma alteração registrada ainda.</td></tr>'}</tbody></table></div>`;
 }
 function cfg(){
-  const c=Store.cfg;
-  return `<div class="box"><b>Quem usa e onde as decisões são salvas</b>
-  <p class="sub">Qualquer pessoa vê a plataforma. Para <b>registrar decisões</b> (destino, ajustes, confirmações), cada pessoa informa seu nome e um token do GitHub com permissão de escrita no repositório. O token fica só neste navegador.</p>
-  <label class="sub">Seu nome (aparece nos registros)</label><input id="c_nome" value="${esc(c.nome)}" style="width:100%">
-  <label class="sub">Repositório das decisões (dono/repositório)</label><input id="c_repo" value="${esc(c.repo)}" style="width:100%" placeholder="ex.: minha-conta/pca-ff">
-  <label class="sub">Arquivo de decisões</label><input id="c_path" value="${esc(c.path)}" style="width:100%">
-  <label class="sub">Token do GitHub (fine-grained, permissão Contents: leitura e escrita)</label><input id="c_tok" type="password" value="${esc(c.token)}" style="width:100%" placeholder="github_pat_...">
-  <div class="row" style="margin-top:12px"><button class="p" id="c_save">Salvar e recarregar</button><button class="s" id="c_clear">Remover token</button></div>
-  <p class="sub">Dica de privacidade: para manter as decisões fora da vista pública, use um repositório privado só para elas e informe-o aqui.</p></div>`;
+  const c=Store.cfg,m=Store.me;
+  const est=!c.token?'<span class="tag" style="color:var(--mut)">Consulta e propostas</span>':!m?'<span class="tag crit">Token não validado</span>':m.push?`<span class="tag ok">Validação liberada · ${esc(m.login)}</span>`:`<span class="tag med">Token sem permissão de validar</span>`;
+  return `<div class="box"><b>Acesso de validação (coordenação)</b> ${est}
+  <p class="sub"><b>Qualquer servidor</b> pode consultar o painel e <b>propor alterações</b>, sem cadastro nem conta: basta informar nome, setor e e-mail e justificar. A proposta segue por e-mail e só altera o painel depois de <b>aprovada pela coordenação</b>, na aba Propostas.</p>
+  <p class="sub">Este campo é só para quem valida. Cole o token do GitHub com permissão de gravação neste repositório (ele fica somente neste navegador).</p>
+  <label class="sub">Token do GitHub</label><input id="c_tok" type="password" value="${esc(c.token)}" style="width:100%" placeholder="github_pat_...">
+  <div class="row" style="margin-top:12px"><button class="p" id="c_save">Entrar</button><button class="s" id="c_clear">Sair e remover token</button></div>
+  <p class="sub">Repositório: ${esc(c.repo)} · Registros guardados no ramo "${esc(c.branch)}". Toda alteração exige justificativa e fica no Histórico.</p></div>`;
 }
 function dados(){
   const d=cur(),nx=S.ds[S.ano+1];
@@ -445,8 +560,14 @@ function dados(){
   <div class="row"><button class="p" id="exp" ${d?'':'disabled'}>Baixar CSV adequado</button><button class="s" id="expn" ${d?'':'disabled'}>Baixar itens enviados ao PCA ${S.ano+1}</button><button class="s" id="expr" ${d?'':'disabled'}>Baixar relatório de apontamentos</button></div></div>`;
 }
 function bind(){
-  const hq=$('#hq');if(hq)hq.oninput=()=>{S.hq=hq.value;draw();const n=$('#hq');if(n){n.focus();n.setSelectionRange(n.value.length,n.value.length);}};const hx=$('#hx');if(hx)hx.onclick=()=>{const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';save('historico_pca.csv','\ufeff'+['Data;Quem;Acao;Item;De;Para;Justificativa'].concat((S.aud||[]).map(a=>[a.at,a.uid,a.acao,a.ref,a.antes,a.depois,a.just].map(q).join(';'))).join('\n'));};const cs=$('#c_save');if(cs)cs.onclick=async()=>{LS.set('gh_nome',$('#c_nome').value.trim());LS.set('gh_repo',$('#c_repo').value.trim());LS.set('gh_path',$('#c_path').value.trim()||'decisoes.json');LS.set('gh_token',$('#c_tok').value.trim());Object.assign(Store.cfg,{nome:$('#c_nome').value.trim(),repo:$('#c_repo').value.trim(),path:$('#c_path').value.trim()||'decisoes.json',token:$('#c_tok').value.trim()});S.msg='Configuração salva.';await Store.load();draw();};
-  const cc=$('#c_clear');if(cc)cc.onclick=()=>{LS.set('gh_token','');Store.cfg.token='';S.msg='Token removido deste navegador.';draw();};
+  const hq=$('#hq');if(hq)hq.oninput=()=>{S.hq=hq.value;draw();const n=$('#hq');if(n){n.focus();n.setSelectionRange(n.value.length,n.value.length);}};const hx=$('#hx');if(hx)hx.onclick=()=>{const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';save('historico_pca.csv','\ufeff'+['Data;Quem;Acao;Item;De;Para;Justificativa'].concat((S.aud||[]).map(a=>[a.at,a.uid,a.acao,a.ref,a.antes,a.depois,a.just].map(q).join(';'))).join('\n'));};document.querySelectorAll('[data-a26]').forEach(e=>{const k=e.dataset.a26;if(e.tagName==='SELECT')e.onchange=()=>{(S.f26=S.f26||{})[k]=e.value;draw();};else e.oninput=()=>{(S.f26=S.f26||{})[k]=e.value;draw();const n=document.querySelector('[data-a26=q]');if(n){n.focus();n.setSelectionRange(n.value.length,n.value.length);}};});
+  document.querySelectorAll('[data-f26]').forEach(b=>b.onclick=()=>{S.f26={...F26[b.dataset.f26]};draw();});const x=$('#x26');if(x)x.onclick=x26;
+  document.querySelectorAll('[data-ed]').forEach(b=>b.onclick=()=>edit(b.dataset.ed));
+  const pf=$('#pf');if(pf)pf.onchange=()=>{S.pf=pf.value;draw();};const pq=$('#pq');if(pq)pq.oninput=()=>{S.pq=pq.value;draw();const n=$('#pq');if(n){n.focus();n.setSelectionRange(n.value.length,n.value.length);}};
+  document.querySelectorAll('[data-pv]').forEach(b=>b.onclick=()=>{const [i,d]=b.dataset.pv.split('|');validar(i,d);});const pb=$('#pb');if(pb)pb.onclick=()=>importarProps($('#pi').value);
+  const px=$('#px');if(px)px.onclick=()=>{const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';const c=['Recebida em','PCA','DFD','Título','Área','Proponente','Setor','E-mail','Ação','De','Para','Justificativa do proponente','Situação','Validado por','Data da validação','Comentário da validação'];save('propostas_pca.csv','\ufeff'+[c.join(';')].concat((S.prop||[]).map(p=>[p.at,p.ano,p.ref,p.titulo,p.area,p.prop.nome,p.prop.setor,p.prop.email,p.acao,p.antes,p.depois,p.just,p.status,(p.val||{}).uid,(p.val||{}).at,(p.val||{}).coment].map(q).join(';'))).join('\n'));};
+  const cs=$('#c_save');if(cs)cs.onclick=async()=>{const t=$('#c_tok').value.trim();LS.set('gh_token',t);Store.cfg.token=t;S.msg='';await Store.entrar();if(Store.me&&!S.msg)S.msg=Store.me.push?'Conectado como '+Store.me.login+'. Você pode editar.':'Conectado como '+Store.me.login+', mas esse token não tem permissão para validar propostas.';await Store.load();draw();};
+  const cc=$('#c_clear');if(cc)cc.onclick=()=>{LS.set('gh_token','');Store.cfg.token='';Store.me=null;S.msg='Você saiu. O token foi removido deste navegador.';draw();};
   ['fsev','freg','fst','pst','fdest'].forEach(k=>{const e=$('#'+k);if(e)e.onchange=()=>{S[k]=e.value;draw();};});
   const q=$('#q');if(q)q.oninput=()=>{S.q=q.value;clearTimeout(window._t);window._t=setTimeout(()=>{draw();const n=$('#q');n.focus();n.setSelectionRange(99,99);},250);};
   document.querySelectorAll('[data-up]').forEach(i=>i.onchange=()=>i.files[0]&&onFile(i.files[0],+i.dataset.up));
