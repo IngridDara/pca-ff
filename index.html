@@ -1,7 +1,7 @@
 <!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Validação do PCA - Fundação Florestal</title>
 <style>
 /* Identidade Fundação Florestal — fundo claro. Para trocar as cores, altere só estas variáveis. */
-:root{color-scheme:light;--bg:#f7f6f1;--card:#fffefb;--tx:#22302a;--mut:#667068;--bd:#e1e3d8;--ac:#1d6b3f;--ac-d:#14502e;--ac2:#e9f1e3;--sol:#d9a21b;--crit:#b3261e;--med:#a86100;--baixa:#506384;--ok:#2e7d32}
+:root{color-scheme:light;--bg:#f7f6f1;--card:#fffefb;--tx:#22302a;--mut:#667068;--bd:#e1e3d8;--ac:#1d6b3f;--ac-d:#14502e;--ac2:#e9f1e3;--sol:#8bbf6a;--crit:#b3261e;--med:#a86100;--baixa:#506384;--ok:#2e7d32}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 'Segoe UI',system-ui,-apple-system,sans-serif}
 .w{max-width:1100px;margin:0 auto;padding:16px}
 h1{font-size:21px;margin:0;font-weight:700;letter-spacing:.2px}
@@ -12,9 +12,9 @@ header h1:before{content:"";display:inline-block;width:10px;height:22px;margin-r
 nav{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--bd);margin-bottom:14px}
 nav button{background:none;border:0;padding:9px 12px;color:var(--mut);cursor:pointer;font:inherit;border-bottom:2px solid transparent}
 nav button:hover{color:var(--ac)}nav button.on{color:var(--ac-d);border-color:var(--sol);border-bottom-width:3px;font-weight:600}
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px}
 .c{background:var(--card);border:1px solid var(--bd);border-top:3px solid var(--ac);border-radius:10px;padding:12px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
-.c b{display:block;font-size:21px;overflow-wrap:anywhere}.c span{color:var(--mut);font-size:12px}
+.c b{display:block;font-size:18px;white-space:nowrap}.c span{color:var(--mut);font-size:12px}
 .tw{overflow-x:auto;background:var(--card);border:1px solid var(--bd);border-radius:10px}
 table{border-collapse:collapse;width:100%;font-size:13px}th,td{padding:7px 9px;border-bottom:1px solid var(--bd);text-align:left;vertical-align:top}
 th{background:var(--ac2);color:var(--ac-d);position:sticky;top:0;white-space:nowrap}tbody tr:hover td{background:#f4f7ef}
