@@ -1,0 +1,443 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Validação do PCA - Fundação Florestal</title>
+<style>
+:root{--bg:#f6f7f4;--card:#fff;--tx:#1d2a24;--mut:#66736c;--bd:#dfe4dd;--ac:#1f6b4a;--ac2:#e6f2ec;--crit:#b3261e;--med:#b26a00;--baixa:#5b6b8a;--ok:#2e7d32}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#141a17;--card:#1c2420;--tx:#e7ece8;--mut:#9aa8a0;--bd:#2d3832;--ac:#5fc191;--ac2:#1f3329;--crit:#ff8a80;--med:#ffb74d;--baixa:#9db0d6;--ok:#81c784}}
+:root[data-theme=dark]{--bg:#141a17;--card:#1c2420;--tx:#e7ece8;--mut:#9aa8a0;--bd:#2d3832;--ac:#5fc191;--ac2:#1f3329;--crit:#ff8a80;--med:#ffb74d;--baixa:#9db0d6;--ok:#81c784}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.45 system-ui,sans-serif}
+.w{max-width:1100px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:0}header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:12px}
+.sub{color:var(--mut);font-size:13px}
+nav{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--bd);margin-bottom:14px}
+nav button{background:none;border:0;padding:9px 12px;color:var(--mut);cursor:pointer;font:inherit;border-bottom:2px solid transparent}
+nav button.on{color:var(--ac);border-color:var(--ac);font-weight:600}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.c{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:12px}
+.c b{display:block;font-size:22px}.c span{color:var(--mut);font-size:12px}
+.tw{overflow-x:auto;background:var(--card);border:1px solid var(--bd);border-radius:10px}
+table{border-collapse:collapse;width:100%;font-size:13px}th,td{padding:7px 9px;border-bottom:1px solid var(--bd);text-align:left;vertical-align:top}
+th{background:var(--ac2);position:sticky;top:0;white-space:nowrap}
+.tag{display:inline-block;padding:1px 8px;border-radius:99px;font-size:11px;font-weight:600;border:1px solid currentColor}
+.crit{color:var(--crit)}.med{color:var(--med)}.baixa{color:var(--baixa)}.ok{color:var(--ok)}
+button.p,select,input,textarea{font:inherit;color:var(--tx);background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:6px 10px}
+button.p{background:var(--ac);color:#fff;border-color:var(--ac);cursor:pointer}button.s{cursor:pointer;font:inherit;color:var(--tx);background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:6px 10px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.bar{height:8px;border-radius:4px;background:var(--bd);overflow:hidden;min-width:80px}.bar i{display:block;height:100%;background:var(--ac)}
+.box{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:14px;margin-bottom:12px}
+.drop{border:2px dashed var(--bd);border-radius:10px;padding:22px;text-align:center;color:var(--mut)}
+.msg.warn{background:#fff3e0;color:#7a4a00}.msg{padding:8px 12px;border-radius:8px;background:var(--ac2);margin-bottom:10px;font-size:13px}
+dialog{border:1px solid var(--bd);border-radius:12px;background:var(--card);color:var(--tx);max-width:560px;width:calc(100% - 32px)}
+dialog label{display:block;margin:8px 0 2px;font-size:12px;color:var(--mut)}dialog input,dialog select,dialog textarea{width:100%}
+@media(max-width:600px){.w{padding:12px}}
+</style>
+<div class="w" id="app"></div>
+<dialog id="dlg"></dialog>
+<script>
+const Core = (() => {
+  const COLS = ['num','status','situacao','titulo','categoria','uasg','ini','fim','prazo','area','dfd','prioridade','item_dfd','conclusao_dfd','classificacao','cod_grupo','nome_grupo','cod_pdm','nome_pdm','cod_item','desc_item','unid','vunit','qtd','vtotal'];
+  function decode(buf) {
+    try { return new TextDecoder('utf-8', {fatal:true}).decode(buf); }
+    catch (e) { return new TextDecoder('windows-1252').decode(buf); }
+  }
+  function parseCSV(t, sep = ';') {
+    if (t.charCodeAt(0) === 0xFEFF) t = t.slice(1);
+    const rows = []; let row = [], f = '', q = false, start = true;
+    const end = c => c === undefined || c === sep || c === '\n' || c === '\r';
+    for (let i = 0; i < t.length; i++) {
+      const c = t[i];
+      if (q) {
+        if (c === '"') {
+          if (t[i+1] === '"') { f += '"'; i++; }
+          else if (end(t[i+1])) q = false;
+          else f += '"';
+        } else f += c;
+      }
+      else if (c === '"' && start) { q = true; start = false; }
+      else if (c === sep) { row.push(f); f = ''; start = true; }
+      else if (c === '\n') { row.push(f.replace(/\r$/, '')); rows.push(row); row = []; f = ''; start = true; }
+      else { f += c; start = false; }
+    }
+    if (f || row.length) { row.push(f.replace(/\r$/, '')); rows.push(row); }
+    return rows.filter(r => r.some(x => x.trim() !== ''));
+  }
+  const num = s => { s = (s || '').trim(); if (!s) return null; const v = parseFloat(s.replace(/\./g, '').replace(',', '.')); return isNaN(v) ? null : v; };
+  const decs = s => { const m = (s || '').trim().match(/,(\d+)$/); return m ? m[1].length : 0; };
+  function pdate(s) {
+    const m = (s || '').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (!m) return null;
+    const d = new Date(Date.UTC(+m[3], +m[2]-1, +m[1]));
+    return d.getUTCDate() === +m[1] ? d : null;
+  }
+  const fdate = d => d ? String(d.getUTCDate()).padStart(2,'0') + '/' + String(d.getUTCMonth()+1).padStart(2,'0') + '/' + d.getUTCFullYear() : '';
+  const norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  const slug = s => String(s).replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const STOP = new Set(['de','da','do','das','dos','para','e','a','o','em','por','com','no','na','ff','pca']);
+  const toks = s => new Set(norm(s).split(' ').filter(w => w.length > 2 && !STOP.has(w)));
+  function jacc(a, b) { let i = 0; a.forEach(x => { if (b.has(x)) i++; }); const u = a.size + b.size - i; return u ? i / u : 0; }
+
+  function load(buf, ano) {
+    const text = typeof buf === 'string' ? buf : decode(buf);
+    const all = parseCSV(text);
+    const body = all.slice(1);
+    const items = body.map((r, i) => { const o = {_l: i + 2}; COLS.forEach((c, k) => o[c] = (r[k] || '').trim()); o.vunit_n = num(o.vunit); o.qtd_n = num(o.qtd); o.vtotal_n = num(o.vtotal); return o; });
+    const map = new Map();
+    items.forEach(it => {
+      let c = map.get(it.num);
+      if (!c) { c = {num: it.num, ano, id: ano + '-' + slug(it.num), titulo: it.titulo, status: it.status, categoria: it.categoria, area: it.area, prioridade: it.prioridade, uasg: it.uasg, ini: it.ini, fim: it.fim, prazo: it.prazo, itens: [], dfds: new Set(), total: 0, linhas: []}; map.set(it.num, c); }
+      c.itens.push(it); c.dfds.add(it.dfd); c.total += it.vtotal_n || 0; c.linhas.push(it._l);
+    });
+    const cs = [...map.values()].map(c => ({...c, dfds: [...c.dfds]}));
+    return {ano, items, cs, text};
+  }
+
+  const REGRAS = {
+    R01: ['crit', 'Número da contratação inválido (esperado N/AAAA)'],
+    R02: ['crit', 'Data de início ou conclusão ausente/inválida'],
+    R03: ['crit', 'Conclusão anterior ao início'],
+    R04: ['med', 'Prazo informado diverge de (conclusão − início)'],
+    R05: ['med', 'Datas fora do exercício do PCA'],
+    R06: ['crit', 'Valor total diverge de valor unitário × quantidade'],
+    R07: ['med', 'Valor com separador/casas decimais anômalos'],
+    R08: ['med', 'Item sem código CATMAT/CATSER'],
+    R09: ['baixa', 'Título curto demais ou duplicado'],
+    R10: ['med', 'DFD misturando bens e serviços'],
+    R11: ['baixa', 'Concentração de conclusões na mesma data'],
+    R12: ['med', 'Categoria da contratação incoerente com os itens'],
+    R13: ['med', 'Área requisitante ou prioridade em branco'],
+    R14: ['crit', 'Valor total zero, negativo ou ausente'],
+    R15: ['med', 'Item de DFD repetido em contratações diferentes']
+  };
+
+  function validar(ds) {
+    const out = []; const ano = ds.ano;
+    const add = (c, r, det, ref) => out.push({id: c.id + '|' + r, cid: c.id, num: c.num, regra: r, sev: REGRAS[r][0], desc: REGRAS[r][1], det, ref: ref || ''});
+    const fimCount = {}; ds.cs.forEach(c => { fimCount[c.fim] = (fimCount[c.fim] || 0) + 1; });
+    const titCount = {}; ds.cs.forEach(c => { const k = norm(c.titulo); titCount[k] = (titCount[k] || 0) + 1; });
+    const dfdItem = {}; ds.items.forEach(it => { if (it.dfd && it.item_dfd) (dfdItem[it.dfd + '#' + it.item_dfd] ||= new Set()).add(it.num); });
+    const dfdCls = {}; ds.items.forEach(it => { if (it.dfd) (dfdCls[it.dfd] ||= new Set()).add(it.classificacao); });
+    const thr = Math.max(8, Math.ceil(ds.cs.length * 0.15));
+    ds.cs.forEach(c => {
+      const ref = 'linha(s) ' + c.linhas.slice(0, 4).join(', ') + (c.linhas.length > 4 ? '…' : '');
+      if (!/^\d{1,4}\/\d{4}$/.test(c.num)) add(c, 'R01', 'Valor lido: "' + c.num + '"', ref);
+      const di = pdate(c.ini), df = pdate(c.fim);
+      if (!di || !df) add(c, 'R02', 'Início "' + c.ini + '" · conclusão "' + c.fim + '"', ref);
+      else {
+        if (df < di) add(c, 'R03', fdate(di) + ' → ' + fdate(df), ref);
+        const dd = Math.round((df - di) / 864e5), pz = parseInt(c.prazo, 10);
+        if (isNaN(pz) || Math.abs(dd - pz) > 3) add(c, 'R04', 'Prazo informado ' + (c.prazo || '—') + ' d · calculado ' + dd + ' d', ref);
+        if (di.getUTCFullYear() < ano - 1 || df.getUTCFullYear() > ano + 1 || df.getUTCFullYear() < ano) add(c, 'R05', fdate(di) + ' → ' + fdate(df) + ' (PCA ' + ano + ')', ref);
+        if (fimCount[c.fim] >= thr) add(c, 'R11', fimCount[c.fim] + ' contratações concluem em ' + c.fim, ref);
+      }
+      const k = norm(c.titulo);
+      if (k.length < 15) add(c, 'R09', 'Título: "' + c.titulo + '"', ref);
+      else if (titCount[k] > 1) add(c, 'R09', 'Título repetido em ' + titCount[k] + ' contratações', ref);
+      if (!c.area || !c.prioridade) add(c, 'R13', 'Área: "' + c.area + '" · Prioridade: "' + c.prioridade + '"', ref);
+      if (!(c.total > 0)) add(c, 'R14', 'Total = ' + c.total, ref);
+      const sem = c.itens.filter(i => !i.cod_item).length;
+      if (sem) add(c, 'R08', sem + ' de ' + c.itens.length + ' itens sem código', ref);
+      const frac = v => v != null && Math.abs(v * 100 - Math.round(v * 100)) > 1e-6;
+      const bad = c.itens.filter(i => frac(i.vunit_n) || frac(i.vtotal_n));
+      if (bad.length) add(c, 'R07', bad.length + ' item(ns), ex.: unitário "' + bad[0].vunit + '", total "' + bad[0].vtotal + '"', ref);
+      const dv = c.itens.filter(i => i.vunit_n != null && i.qtd_n != null && i.vtotal_n != null && Math.abs(i.vunit_n * i.qtd_n - i.vtotal_n) > Math.max(0.05, Math.abs(i.vtotal_n) * 0.001));
+      if (dv.length) add(c, 'R06', dv.length + ' item(ns), ex.: ' + dv[0].vunit + ' × ' + dv[0].qtd + ' ≠ ' + dv[0].vtotal, ref);
+      const cls = new Set(c.itens.map(i => i.classificacao).filter(Boolean));
+      const cat = (c.categoria || '').toUpperCase();
+      if ((cat === 'BENS' && cls.has('Serviço')) || (cat.startsWith('SERV') && cls.has('Material'))) add(c, 'R12', 'Categoria ' + c.categoria + ' · itens: ' + [...cls].join('/'), ref);
+      const mixed = c.dfds.filter(d => dfdCls[d] && dfdCls[d].size > 1);
+      if (mixed.length) add(c, 'R10', 'DFD ' + mixed.slice(0, 3).join(', '), ref);
+      const rep = c.itens.filter(i => dfdItem[i.dfd + '#' + i.item_dfd] && dfdItem[i.dfd + '#' + i.item_dfd].size > 1);
+      if (rep.length) add(c, 'R15', 'DFD ' + rep[0].dfd + ' item ' + rep[0].item_dfd + ' em mais de uma contratação', ref);
+    });
+    return out;
+  }
+
+  function cruzar(a, b) {
+    const tb = b.cs.map(c => ({c, t: toks(c.titulo)}));
+    const usado = new Set(); const pares = [];
+    a.cs.forEach(x => {
+      const tx = toks(x.titulo); let best = null, bs = 0;
+      tb.forEach(y => { const s = jacc(tx, y.t); if (s > bs) { bs = s; best = y.c; } });
+      if (best && bs >= 0.6) { usado.add(best.id); pares.push({a: x, b: best, s: bs}); } else pares.push({a: x, b: null, s: 0});
+    });
+    const novos = b.cs.filter(c => !usado.has(c.id));
+    return {pares, novos};
+  }
+
+
+  function parsePNCP(text) {
+    const i = text.indexOf('controle;'); if (i < 0) return {rows: [], coletado: null};
+    const r = parseCSV(text.slice(i)); const h = r[0]; const ix = k => h.indexOf(k);
+    const f = x => { const v = parseFloat(x); return isNaN(v) ? 0 : v; };
+    let max = null;
+    const rows = r.slice(1).filter(x => x.length >= 9).map(x => {
+      const o = {controle: x[ix('controle')], mod: x[ix('modalidade')], numero: x[ix('numero')], ano: x[ix('ano')], objeto: (x[ix('objeto')] || '').trim(),
+        est: f(x[ix('valor_estimado')]), hom: f(x[ix('valor_homologado')]), pub: (x[ix('publicacao')] || '').slice(0, 10), sit: x[ix('situacao')]};
+      o.id = o.controle.split('-').pop();
+      const c = ix('coletado_em') >= 0 ? x[ix('coletado_em')] : ''; if (c && (!max || c > max)) max = c;
+      return o;
+    });
+    return {rows, coletado: max};
+  }
+  const STOP2 = new Set(['de','da','do','das','dos','para','e','a','o','em','por','com','no','na','ao','aos','as','os','que','ff','fundacao','florestal','contratacao','servicos','servico','aquisicao','conforme','termo','referencia','edital','anexos','pca','sao','paulo','estado','unidades','unidade','conservacao','prestacao','empresa','especializada']);
+  const toks2 = s => new Set(norm(s).split(' ').filter(w => w.length > 2 && !STOP2.has(w)).map(w => w.slice(0, 6)));
+  function cruzarPNCP(ds, pub, vinc) {
+    const byid = {}; pub.forEach(p => byid[p.id] = p);
+    const PT = pub.map(p => ({p, t: toks2(p.objeto)}));
+    return ds.cs.map(c => {
+      const v = (vinc || {})[ds.ano + ':' + c.num];
+      let ids = [], conf = '', obs = '';
+      if (v) { ids = v.ids.filter(i => byid[i]); conf = v.conf; obs = v.obs || ''; }
+      else {
+        const tc = toks2(c.titulo); let best = null, bs = 0;
+        PT.forEach(({p, t}) => { let i = 0; tc.forEach(x => { if (t.has(x)) i++; }); if (!i) return;
+          const s = i / Math.min(tc.size, t.size) * 0.6 + i / (tc.size + t.size - i) * 0.4;
+          if (p.ano === String(ds.ano) && (i >= 2 || s >= 0.95) && s > bs) { bs = s; best = p; } });
+        if (best && bs >= 0.6) { ids = [best.id]; conf = 'sugestão'; obs = 'Sugestão automática (' + Math.round(bs * 100) + '%): confirmar.'; }
+      }
+      const ps = ids.map(i => byid[i]);
+      const hom = ps.reduce((s, p) => s + (p.sit === 'Anulada' ? 0 : p.hom), 0);
+      const status = !ps.length ? 'Sem publicação localizada' : hom > 0 ? 'Contratada (homologada)' : 'Publicada, sem homologação';
+      return {num: c.num, titulo: c.titulo, area: c.area, pca: c.total, ids, conf, obs, status, est: ps.reduce((s, p) => s + p.est, 0), hom};
+    });
+  }
+  function exportCSV(ds, ov, keep) {
+    const head = 'Número da contratação;Status da contratação;Situação da Execução;Título da contratação;Categoria da contratação;UASG Atual;Data estimada para o início do processo de contratação;Data estimada para a conclusão do processo de contratação;Prazo estimado de duração do processo de contratação (dias);Área requisitante;Nº DFD;Prioridade;Nº do Item no DFD;Data da conclusão da Contratação no DFD;Classificação da Contratação;Código Classe/Grupo;Nome Classe/Grupo;Código PDM material;Nome do PDM material;Código material/serviço;Descrição material/serviço;Unidade Fornecimento;Valor Unitário;Quantidade;Valor Total';
+    const lines = [head];
+    ds.items.forEach(it => {
+      const o = {...it}; const c = ds.cs.find(x => x.num === it.num); if (keep && c && !keep(c)) return; const f = (ov && c && ov[c.id]) || {};
+      ['num','titulo','ini','fim','prazo','area','prioridade','categoria'].forEach(k => { if (f[k]) o[k] = f[k]; });
+      if (f.fim) o.conclusao_dfd = f.fim;
+      lines.push(COLS.map(k => String(o[k] ?? '').replace(/;/g, ',')).join(';'));
+    });
+    return '﻿' + lines.join('\r\n');
+  }
+  return {parsePNCP, cruzarPNCP, COLS, decode, parseCSV, load, validar, cruzar, exportCSV, REGRAS, norm, slug, fdate, pdate};
+})();
+
+
+const $=s=>document.querySelector(s), esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const brl=v=>(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const S={meta:{},ano:2026,tab:'painel',pn:null,vinc:{},dest:{},pst:'',pnMsg:'',ds:{},val:{},aj:{},ov:{},db:null,uid:null,msg:'',fsev:'',freg:'',fst:'',q:''};
+const ST={pendente:'Pendente',ajustado:'Ajustado',justificado:'Justificado / aceito'};
+const ajId=(cid,r)=>cid+'_'+r;
+function setDS(ano,text){S.ds[ano]=Core.load(text,ano);S.val[ano]=Core.validar(S.ds[ano]);}
+const cur=()=>S.ds[S.ano]||null, vals=()=>S.val[S.ano]||[];
+const stOf=v=>(S.aj[ajId(v.cid,v.regra)]||{}).status||'pendente';
+
+/* ===== Armazenamento: GitHub (decisoes.json) + arquivos da pasta coleta/ ===== */
+const LS={get(k){try{return localStorage.getItem(k)||''}catch(e){return ''}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+const guess=(()=>{const m=location.hostname.match(/^([^.]+)\.github\.io$/),p=location.pathname.split('/').filter(Boolean);return m&&p[0]?m[1]+'/'+p[0]:'';})();
+const Store={
+  cfg:{token:LS.get('gh_token'),repo:LS.get('gh_repo')||guess,path:LS.get('gh_path')||'decisoes.json',nome:LS.get('gh_nome')},
+  data:{ajustes:{},ov:{},destino:{},vinc:{}},sha:null,
+  get canWrite(){return !!(this.cfg.token&&this.cfg.repo);},
+  url(){return 'https://api.github.com/repos/'+this.cfg.repo+'/contents/'+this.cfg.path.split('/').map(encodeURIComponent).join('/');},
+  hdr(){return {Accept:'application/vnd.github+json',Authorization:'Bearer '+this.cfg.token};},
+  async load(){
+    let j=null;
+    try{
+      if(this.canWrite){const r=await fetch(this.url()+'?t='+Date.now(),{headers:this.hdr()});
+        if(r.ok){const o=await r.json();this.sha=o.sha;j=JSON.parse(decodeURIComponent(escape(atob(o.content.replace(/\n/g,'')))));}
+        else if(r.status===404){this.sha=null;j={};}
+        else throw new Error('GitHub respondeu '+r.status+' ao ler as decisões (confira repositório e token).');}
+      else{const r=await fetch('decisoes.json?t='+Date.now());if(r.ok)j=await r.json();}
+    }catch(e){S.msg=e.message||'Falha ao ler decisões.';}
+    if(j){this.data={ajustes:j.ajustes||{},ov:j.ov||{},destino:j.destino||{},vinc:j.vinc||{}};}
+    S.aj=this.data.ajustes;S.ov=this.data.ov;S.dest=this.data.destino;S.vinc=this.data.vinc;
+  },
+  async mutate(fn){
+    if(!this.canWrite){S.msg='Modo leitura: informe o token do GitHub em Configurações para salvar decisões.';draw();return false;}
+    for(let t=0;t<3;t++){
+      fn(this.data);S.aj=this.data.ajustes;S.ov=this.data.ov;S.dest=this.data.destino;S.vinc=this.data.vinc;draw();
+      const body={message:'Decisão registrada por '+(this.cfg.nome||'equipe'),content:btoa(unescape(encodeURIComponent(JSON.stringify(this.data,null,1))))};
+      if(this.sha)body.sha=this.sha;
+      try{const r=await fetch(this.url(),{method:'PUT',headers:{...this.hdr(),'Content-Type':'application/json'},body:JSON.stringify(body)});
+        if(r.ok){const o=await r.json();this.sha=o.content.sha;return true;}
+        if(r.status===409||r.status===422){await this.load();continue;}
+        S.msg='Não foi possível salvar ('+r.status+'). Confira o token e a permissão de escrita.';draw();return false;
+      }catch(e){S.msg='Falha de rede ao salvar.';draw();return false;}
+    }
+    return false;
+  }
+};
+const who=()=>Store.cfg.nome||'';
+async function getText(path){const r=await fetch(path+'?t='+Date.now());if(!r.ok)return null;return await r.text();}
+async function loadPNCP(){
+  let err='';
+  try{const t=await getText('coleta/pncp_ff.csv');
+    if(t&&t.includes('controle;')){const p=Core.parsePNCP(t);S.pn={rows:p.rows,coletado:p.coletado,fonte:'repo'};}
+    else err='ainda não existe coleta/pncp_ff.csv: rode a rotina em Actions';
+  }catch(e){err='falha ao ler o PNCP';}
+  S.pnMsg=err;
+}
+async function loadPCAFolder(){
+  try{const m=await getText('coleta/atualizacao.json');if(m)S.meta=JSON.parse(m);}catch(e){}
+  for(const y of [2026,2027]){
+    try{const t=await getText('coleta/pca_'+y+'_utf8.csv');if(t&&t.indexOf('contrata')>=0)setDS(y,t.replace(/^﻿/,''));}catch(e){}
+  }
+}
+async function init(){
+  draw();
+  await Store.load();
+  await Promise.all([loadPNCP(),loadPCAFolder()]);
+  if(!S.ds[S.ano]&&S.ds[2027])S.ano=2027;
+  draw();
+}
+async function onFile(f,ano){
+  const text=Core.decode(await f.arrayBuffer());
+  try{setDS(ano,text);}catch(e){S.msg='Não consegui ler o arquivo: '+e.message;draw();return;}
+  S.ano=ano;S.msg=`PCA ${ano} carregado só nesta tela (${S.ds[ano].cs.length} contratações). Para valer para todos, envie o arquivo ao repositório (pca_${ano}.csv).`;draw();
+}
+async function setStatus(cid,regra,status,obs){
+  const id=ajId(cid,regra);const d={cid,regra,status,obs:obs||'',uid:who(),at:new Date().toISOString()};
+  await Store.mutate(D=>{D.ajustes[id]=d;});
+}
+async function saveOv(cid,f){await Store.mutate(D=>{D.ov[cid]={f};});}
+function sevTag(s){return `<span class="tag ${s}">${{crit:'Crítico',med:'Médio',baixa:'Baixo'}[s]}</span>`}
+const ovF=()=>{const o={};Object.keys(S.ov).forEach(k=>o[k]=S.ov[k].f||{});return o;};
+const DEST={'':'A definir',manter:'Manter no ano',proximo:'Enviar ao PCA seguinte',cancelar:'Cancelar'};
+const yrs=()=>S.ano==='todos'?[2026,2027].filter(a=>S.ds[a]):(S.ds[S.ano]?[S.ano]:[]);
+const allVals=()=>yrs().flatMap(a=>S.val[a]||[]);
+const allCs=()=>yrs().flatMap(a=>S.ds[a].cs);
+const destOf=c=>(S.dest[c.id]||{}).d||'';
+function destSel(c){return `<select data-dest="${esc(c.id)}">${Object.keys(DEST).map(k=>`<option value="${k}" ${destOf(c)==k?'selected':''}>${k=='manter'?'Manter em '+c.ano:k=='proximo'?'Enviar ao PCA '+(c.ano+1):DEST[k]}</option>`).join('')}</select>`}
+async function setDest(c,d){const x={d,uid:who(),at:new Date().toISOString()};await Store.mutate(D=>{D.destino[c.id]=x;});}
+function fmtDT(s){if(!s)return '—';const d=new Date(s);return isNaN(d)?s:d.toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'});}
+function draw(){
+  const d=cur(),v=vals();
+  const tabs=[['painel','Painel'],['pend','Pendências'],['contr','Contratações'],['cruz','Cruzamento 2026×2027'],['pncp','Situação no PNCP'],['dados','Importar / Exportar'],['cfg','Configurações']];
+  if(S.ano==='todos'&&!['pend','contr','pncp'].includes(S.tab))S.ano=2026;
+  const age=S.pn&&S.pn.coletado?(Date.now()-new Date(S.pn.coletado))/864e5:null;
+  let h=`<header><div><h1>Validação e adequação do PCA</h1><div class="sub">Fundação Florestal · NGI coordena, NCP consolida</div></div>
+  <div class="row"><label class="sub">PCA</label><select id="ano">${[2026,2027].map(a=>`<option ${a==S.ano?'selected':''}>${a}</option>`).join('')}${['pend','contr','pncp'].includes(S.tab)?`<option value="todos" ${S.ano==='todos'?'selected':''}>Todos</option>`:''}</select></div></header>
+  <div class="msg ${age!=null&&age>10?'warn':''}"><b>Última atualização do PNCP:</b> ${S.pn?fmtDT(S.pn.coletado):'ainda não carregado'}${S.pn?` · fonte: coleta automática no GitHub`:''}${age!=null&&age>10?' · <b>desatualizado há '+Math.floor(age)+' dias: verifique o agendamento no Mac</b>':''} <button class="s" id="rl">Recarregar</button><br><span class="sub">Arquivo do PCA 2026: ${fmtDT((S.meta||{}).pca2026)} · PCA 2027: ${fmtDT((S.meta||{}).pca2027)}${Store.canWrite?' · <b>gravação ativa</b>':' · modo leitura'}</span>${S.pnMsg?'<br><span class="sub">'+esc(S.pnMsg)+'</span>':''}</div>`;
+  if(S.msg)h+=`<div class="msg">${esc(S.msg)}</div>`;
+  h+=`<nav>${tabs.map(t=>`<button data-t="${t[0]}" class="${S.tab==t[0]?'on':''}">${t[1]}</button>`).join('')}</nav>`;
+  if(!yrs().length&&S.tab!='dados'&&S.tab!='cfg')h+=`<div class="box">PCA ${S.ano} ainda não está no repositório. Envie <code>pca_${S.ano}.csv</code> ao repositório e rode a rotina em Actions (ou espere a próxima execução).</div>`;
+  else h+=({painel,pend,contr,cruz,pncp,dados,cfg}[S.tab])();
+  $('#app').innerHTML=h;
+  $('#ano').onchange=e=>{S.ano=e.target.value==='todos'?'todos':+e.target.value;draw();};
+  document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{S.tab=b.dataset.t;draw();});
+  const rl=$('#rl');if(rl)rl.onclick=async()=>{S.pnMsg='Recarregando…';draw();await Store.load();await loadPNCP();await loadPCAFolder();draw();};
+  bind();
+}
+function painel(){
+  const d=cur(),v=vals();const n=x=>v.filter(a=>a.sev==x).length;
+  const feitos=v.filter(a=>stOf(a)!='pendente').length;const pct=v.length?Math.round(feitos/v.length*100):100;
+  const comProb=new Set(v.map(a=>a.cid)).size;
+  let h=`<div class="cards"><div class="c"><b>${d.cs.length}</b><span>contratações</span></div><div class="c"><b>${d.items.length}</b><span>itens</span></div><div class="c"><b>${brl(d.cs.reduce((s,c)=>s+c.total,0))}</b><span>valor estimado</span></div>
+  <div class="c"><b class="crit">${n('crit')}</b><span>apontamentos críticos</span></div><div class="c"><b class="med">${n('med')}</b><span>médios</span></div><div class="c"><b>${comProb}</b><span>contratações com pendência</span></div></div>
+  <div class="cards">${['','manter','proximo','cancelar'].map(k=>{const x=d.cs.filter(c=>destOf(c)==k);return `<div class="c"><b>${x.length}</b><span>${DEST[k]} · ${brl(x.reduce((s,c)=>s+c.total,0))}</span></div>`}).join('')}</div>
+  <div class="box"><b>Adequação: ${pct}%</b> (${feitos} de ${v.length} apontamentos tratados)<div class="bar" style="margin-top:6px"><i style="width:${pct}%"></i></div></div>
+  <div class="tw"><table><tr><th>Regra</th><th>Descrição</th><th>Gravidade</th><th>Qtd</th><th>Tratados</th></tr>`;
+  Object.keys(Core.REGRAS).forEach(r=>{const x=v.filter(a=>a.regra==r);h+=`<tr><td>${r}</td><td>${Core.REGRAS[r][1]}</td><td>${sevTag(Core.REGRAS[r][0])}</td><td>${x.length||'<span class="ok">0 ✓</span>'}</td><td>${x.filter(a=>stOf(a)!='pendente').length}</td></tr>`;});
+  const ar={};d.cs.forEach(c=>{const a=c.area||'(sem área)';(ar[a]||(ar[a]={n:0,v:0,p:0}));ar[a].n++;ar[a].v+=c.total;});v.forEach(a=>{const c=d.cs.find(x=>x.id==a.cid);const k=c.area||'(sem área)';if(stOf(a)=='pendente')ar[k].p++;});
+  h+=`</table></div><h3>Por área requisitante</h3><div class="tw"><table><tr><th>Área</th><th>Contratações</th><th>Valor</th><th>Pendências</th></tr>`;
+  Object.entries(ar).sort((a,b)=>b[1].v-a[1].v).forEach(([k,x])=>h+=`<tr><td>${esc(k)}</td><td>${x.n}</td><td>${brl(x.v)}</td><td>${x.p}</td></tr>`);
+  return h+'</table></div>';
+}
+function pend(){
+  const v0=allVals();let v=v0.filter(a=>(!S.fsev||a.sev==S.fsev)&&(!S.freg||a.regra==S.freg)&&(!S.fst||stOf(a)==S.fst)&&(!S.q||(a.num+a.det).toLowerCase().includes(S.q.toLowerCase())));
+  const o=x=>({crit:0,med:1,baixa:2}[x.sev]);v=[...v].sort((a,b)=>o(a)-o(b)||a.regra.localeCompare(b.regra));
+  const C={};allCs().forEach(c=>C[c.id]=c);
+  let h=`<div class="row"><select id="fsev"><option value="">Gravidade: todas</option><option value="crit" ${S.fsev=='crit'?'selected':''}>Crítico</option><option value="med" ${S.fsev=='med'?'selected':''}>Médio</option><option value="baixa" ${S.fsev=='baixa'?'selected':''}>Baixo</option></select>
+  <select id="freg"><option value="">Regra: todas</option>${Object.keys(Core.REGRAS).map(r=>`<option ${S.freg==r?'selected':''}>${r}</option>`).join('')}</select>
+  <select id="fst"><option value="">Situação: todas</option>${Object.keys(ST).map(k=>`<option value="${k}" ${S.fst==k?'selected':''}>${ST[k]}</option>`).join('')}</select>
+  <input id="q" placeholder="Buscar nº ou texto" value="${esc(S.q)}"><span class="sub">${v.length} apontamentos</span></div>
+  <div class="tw"><table><tr><th>PCA</th><th>Contratação</th><th>Regra</th><th>Detalhe</th><th>Gravidade</th><th>Situação</th><th></th></tr>`;
+  v.slice(0,300).forEach(a=>{const c=C[a.cid]||{},s=stOf(a),aj=S.aj[ajId(a.cid,a.regra)]||{};
+    h+=`<tr><td><b>${c.ano||''}</b></td><td><b>${esc(a.num)}</b><br><span class="sub">${esc((c.titulo||'').slice(0,60))}</span></td><td>${a.regra}<br><span class="sub">${a.desc}</span></td><td>${esc(a.det)}<br><span class="sub">${esc(a.ref)}</span>${aj.obs?`<br><i>${esc(aj.obs)}</i>`:''}</td><td>${sevTag(a.sev)}</td><td class="${s=='pendente'?'':'ok'}">${ST[s]}</td><td><button class="s" data-act="${esc(a.cid)}|${a.regra}">Tratar</button></td></tr>`;});
+  return h+`</table></div>${v.length>300?'<p class="sub">Mostrando 300; refine os filtros.</p>':''}`;
+}
+function contr(){
+  const q=(S.q||'').toLowerCase();
+  const cs=allCs().filter(c=>(!q||(c.num+c.titulo+c.area).toLowerCase().includes(q))&&(!S.fdest||(S.fdest=='_'?destOf(c)=='':destOf(c)==S.fdest)));
+  const pc={};allVals().forEach(a=>{if(stOf(a)=='pendente')pc[a.cid]=(pc[a.cid]||0)+1;});
+  let h=`<div class="row"><input id="q" placeholder="Buscar nº, título ou área" value="${esc(S.q)}"><select id="fdest"><option value="">Destino: todos</option><option value="_" ${S.fdest=='_'?'selected':''}>A definir</option><option value="manter" ${S.fdest=='manter'?'selected':''}>Manter no ano</option><option value="proximo" ${S.fdest=='proximo'?'selected':''}>Enviar ao PCA seguinte</option><option value="cancelar" ${S.fdest=='cancelar'?'selected':''}>Cancelar</option></select><span class="sub">${cs.length} contratações</span></div><div class="tw"><table><tr><th>PCA</th><th>Nº</th><th>Título</th><th>Área</th><th>Prio.</th><th>Início</th><th>Conclusão</th><th>Itens</th><th>Valor</th><th>Pend.</th><th>Destino</th><th></th></tr>`;
+  cs.slice(0,600).forEach(c=>{const o=(S.ov[c.id]||{}).f||{};const ed=Object.keys(o).length;
+    h+=`<tr><td><b>${c.ano}</b></td><td>${esc(o.num||c.num)}${ed?' <span class="tag ok">editado</span>':''}</td><td>${esc(o.titulo||c.titulo)}</td><td>${esc(c.area)}</td><td>${esc(c.prioridade)}</td><td>${esc(o.ini||c.ini)}</td><td>${esc(o.fim||c.fim)}</td><td>${c.itens.length}</td><td>${brl(c.total)}</td><td>${pc[c.id]||''}</td><td>${destSel(c)}</td><td><button class="s" data-ed="${esc(c.id)}">Adequar</button></td></tr>`;});
+  return h+'</table></div>';
+}
+function cruz(){
+  const a=S.ds[2026],b=S.ds[2027];
+  if(!a||!b)return '<div class="box">Carregue os dois arquivos (PCA 2026 e PCA 2027) para cruzar. Compara títulos por similaridade para achar itens do 2026 que reaparecem no 2027 (migração/duplicidade) e o que é novo.</div>';
+  const x=Core.cruzar(a,b);const m=x.pares.filter(p=>p.b),nm=x.pares.filter(p=>!p.b);
+  let h=`<div class="cards"><div class="c"><b>${m.length}</b><span>2026 que reaparecem em 2027</span></div><div class="c"><b>${nm.length}</b><span>2026 sem correspondente em 2027</span></div><div class="c"><b>${x.novos.length}</b><span>2027 novas</span></div></div>
+  <p class="sub">Confira se as de 2026 sem correspondente foram executadas, canceladas ou esquecidas (art. 18 §3 do Decreto 67.689/2023 — aplicabilidade a confirmar pelo Jurídico).</p>
+  <h3>Reaparecem</h3><div class="tw"><table><tr><th>2026</th><th>2027</th><th>Similaridade</th><th>Valor 26 → 27</th></tr>`;
+  m.forEach(p=>h+=`<tr><td>${esc(p.a.num)} · ${esc(p.a.titulo)}</td><td>${esc(p.b.num)} · ${esc(p.b.titulo)}</td><td>${Math.round(p.s*100)}%</td><td>${brl(p.a.total)} → ${brl(p.b.total)}</td></tr>`);
+  h+=`</table></div><h3>2026 sem correspondente em 2027</h3><div class="tw"><table><tr><th>Nº</th><th>Título</th><th>Status</th><th>Área</th><th>Valor</th></tr>`;
+  nm.forEach(p=>h+=`<tr><td>${esc(p.a.num)}</td><td>${esc(p.a.titulo)}</td><td>${esc(p.a.status)}</td><td>${esc(p.a.area)}</td><td>${brl(p.a.total)}</td></tr>`);
+  return h+'</table></div>';
+}
+
+function pncp(){
+  if(!S.pn)return '<div class="box">Dados do PNCP ainda não carregados. Rode a coleta (pasta "PNCP automático") ou toque em Recarregar.</div>';
+  const P=S.pn.rows;const byid={};P.forEach(p=>byid[p.id]=p);
+  const R=[];yrs().forEach(a=>Core.cruzarPNCP(S.ds[a],P,S.vinc).forEach(r=>{const c=S.ds[a].cs.find(x=>x.num===r.num);R.push({...r,ano:a,c});}));
+  const used=new Set();[2026,2027].filter(a=>S.ds[a]).forEach(a=>Core.cruzarPNCP(S.ds[a],P,S.vinc).forEach(r=>r.ids.forEach(i=>used.add(i))));
+  const sts=['Contratada (homologada)','Publicada, sem homologação','Sem publicação localizada'];
+  const L=R.filter(r=>!S.pst||r.status==S.pst);
+  let h=`<p class="sub">Cruzamento dos PCAs com as publicações da Fundação Florestal no PNCP (${P.length} publicações). "alta/provável" foram conferidas; "sugestão" é automática e precisa de confirmação. Sem publicação localizada não prova que não foi contratado.</p>
+  <div class="cards">${sts.map(s=>`<div class="c"><b>${R.filter(r=>r.status==s).length}</b><span>${s}</span></div>`).join('')}<div class="c"><b>${P.filter(p=>!used.has(p.id)).length}</b><span>publicações sem item no PCA</span></div></div>
+  <div class="row"><select id="pst"><option value="">Situação: todas</option>${sts.map(s=>`<option ${S.pst==s?'selected':''}>${s}</option>`).join('')}</select><span class="sub">${L.length} itens</span></div>
+  <div class="tw"><table><tr><th>PCA</th><th>Nº</th><th>Título</th><th>Área</th><th>Valor PCA</th><th>Situação</th><th>Conf.</th><th>PNCP homologado</th><th>Destino</th><th>Publicações / observação</th></tr>`;
+  L.forEach(r=>{h+=`<tr><td><b>${r.ano}</b></td><td>${esc(r.num)}</td><td>${esc(r.titulo)}</td><td>${esc(r.area)}</td><td>${brl(r.pca)}</td><td class="${r.status[0]=='C'?'ok':r.status[0]=='P'?'med':''}">${r.status}</td><td>${r.conf||''}${r.conf=='sugestão'?`<br><button class="s" data-vc="${r.ano}:${esc(r.num)}">Confirmar</button> <button class="s" data-vd="${r.ano}:${esc(r.num)}">Descartar</button>`:''}</td><td>${r.hom?brl(r.hom):''}</td><td>${destSel(r.c)}</td><td class="sub">${r.ids.slice(0,6).map(i=>{const p=byid[i];return esc(i)+(p?` (${esc(p.mod)} ${esc(p.numero)})`:'')}).join('; ')}${r.ids.length>6?' …':''}${r.obs?'<br>'+esc(r.obs):''}</td></tr>`;});
+  h+='</table></div>';
+  if(!S.pst){h+=`<h3>Publicações do PNCP sem item correspondente em nenhum PCA</h3><div class="tw"><table><tr><th>Controle</th><th>Modalidade</th><th>Objeto</th><th>Estimado</th><th>Homologado</th><th>Publicação</th></tr>`;
+    P.filter(p=>!used.has(p.id)).forEach(p=>h+=`<tr><td>${esc(p.id)}</td><td>${esc(p.mod)}</td><td>${esc(p.objeto.slice(0,160))}</td><td>${p.est?brl(p.est):''}</td><td>${p.hom?brl(p.hom):''}</td><td>${esc(p.pub)}</td></tr>`);h+='</table></div>';}
+  return h;
+}
+function decideVinc(key,ok){
+  const [ano,num]=[+key.split(':')[0],key.slice(5)];const r=Core.cruzarPNCP(S.ds[ano],S.pn.rows,S.vinc).find(x=>x.num===num);if(!r)return;
+  const v=ok?{conf:'confirmada',ids:r.ids,obs:'Confirmada pela equipe.'}:{conf:'descartada',ids:[],obs:''};Store.mutate(D=>{D.vinc[key]=v;});
+}
+function cfg(){
+  const c=Store.cfg;
+  return `<div class="box"><b>Quem usa e onde as decisões são salvas</b>
+  <p class="sub">Qualquer pessoa vê a plataforma. Para <b>registrar decisões</b> (destino, ajustes, confirmações), cada pessoa informa seu nome e um token do GitHub com permissão de escrita no repositório. O token fica só neste navegador.</p>
+  <label class="sub">Seu nome (aparece nos registros)</label><input id="c_nome" value="${esc(c.nome)}" style="width:100%">
+  <label class="sub">Repositório das decisões (dono/repositório)</label><input id="c_repo" value="${esc(c.repo)}" style="width:100%" placeholder="ex.: minha-conta/pca-ff">
+  <label class="sub">Arquivo de decisões</label><input id="c_path" value="${esc(c.path)}" style="width:100%">
+  <label class="sub">Token do GitHub (fine-grained, permissão Contents: leitura e escrita)</label><input id="c_tok" type="password" value="${esc(c.token)}" style="width:100%" placeholder="github_pat_...">
+  <div class="row" style="margin-top:12px"><button class="p" id="c_save">Salvar e recarregar</button><button class="s" id="c_clear">Remover token</button></div>
+  <p class="sub">Dica de privacidade: para manter as decisões fora da vista pública, use um repositório privado só para elas e informe-o aqui.</p></div>`;
+}
+function dados(){
+  const d=cur(),nx=S.ds[S.ano+1];
+  return `<div class="box"><b>Conferir um PCA fora do repositório</b><p class="sub">Carrega um CSV só nesta tela, para teste. Para valer para todos, envie <code>pca_2026.csv</code> / <code>pca_2027.csv</code> ao repositório: a rotina converte e publica sozinha.</p>
+  <div class="row">${[2026,2027].map(a=>`<label class="s">PCA ${a}${S.ds[a]?' ✓':''} <input type="file" accept=".csv,.txt" data-up="${a}" hidden></label>`).join('')}</div></div>
+  <div class="box"><b>Exportar PCA ${S.ano} adequado</b><p class="sub">Aplica as edições da aba Contratações e <b>remove</b> os itens marcados como "Cancelar" ou "Enviar ao PCA seguinte". Reenvie ao sistema após conferência.</p>
+  <div class="row"><button class="p" id="exp" ${d?'':'disabled'}>Baixar CSV adequado</button><button class="s" id="expn" ${d?'':'disabled'}>Baixar itens enviados ao PCA ${S.ano+1}</button><button class="s" id="expr" ${d?'':'disabled'}>Baixar relatório de apontamentos</button></div></div>`;
+}
+function bind(){
+  const cs=$('#c_save');if(cs)cs.onclick=async()=>{LS.set('gh_nome',$('#c_nome').value.trim());LS.set('gh_repo',$('#c_repo').value.trim());LS.set('gh_path',$('#c_path').value.trim()||'decisoes.json');LS.set('gh_token',$('#c_tok').value.trim());Object.assign(Store.cfg,{nome:$('#c_nome').value.trim(),repo:$('#c_repo').value.trim(),path:$('#c_path').value.trim()||'decisoes.json',token:$('#c_tok').value.trim()});S.msg='Configuração salva.';await Store.load();draw();};
+  const cc=$('#c_clear');if(cc)cc.onclick=()=>{LS.set('gh_token','');Store.cfg.token='';S.msg='Token removido deste navegador.';draw();};
+  ['fsev','freg','fst','pst','fdest'].forEach(k=>{const e=$('#'+k);if(e)e.onchange=()=>{S[k]=e.value;draw();};});
+  const q=$('#q');if(q)q.oninput=()=>{S.q=q.value;clearTimeout(window._t);window._t=setTimeout(()=>{draw();const n=$('#q');n.focus();n.setSelectionRange(99,99);},250);};
+  document.querySelectorAll('[data-up]').forEach(i=>i.onchange=()=>i.files[0]&&onFile(i.files[0],+i.dataset.up));
+  document.querySelectorAll('[data-act]').forEach(b=>b.onclick=()=>{const [cid,r]=b.dataset.act.split('|');treat(cid,r);});
+  document.querySelectorAll('[data-ed]').forEach(b=>b.onclick=()=>edit(b.dataset.ed));
+  document.querySelectorAll('[data-dest]').forEach(s=>s.onchange=()=>{const c=allCs().find(x=>x.id==s.dataset.dest);if(c)setDest(c,s.value);});
+  document.querySelectorAll('[data-vc]').forEach(b=>b.onclick=()=>decideVinc(b.dataset.vc,true));
+  document.querySelectorAll('[data-vd]').forEach(b=>b.onclick=()=>decideVinc(b.dataset.vd,false));
+  const e=$('#exp');if(e)e.onclick=()=>save('PCA_'+S.ano+'_adequado.csv',Core.exportCSV(cur(),ovF(),c=>{const k=destOf(c);return k!='cancelar'&&k!='proximo';}));
+  const en=$('#expn');if(en)en.onclick=()=>save('PCA_'+S.ano+'_itens_para_'+(S.ano+1)+'.csv',Core.exportCSV(cur(),ovF(),c=>destOf(c)=='proximo'));
+  const r=$('#expr');if(r)r.onclick=()=>save('Apontamentos_PCA_'+S.ano+'.csv','\uFEFFContratação;Regra;Descrição;Detalhe;Gravidade;Situação;Observação\r\n'+vals().map(a=>[a.num,a.regra,a.desc,a.det,a.sev,ST[stOf(a)],(S.aj[ajId(a.cid,a.regra)]||{}).obs||''].map(x=>String(x).replace(/;/g,',')).join(';')).join('\r\n'));
+}
+async function save(name,data){const u=URL.createObjectURL(new Blob([data],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),2000);}
+function treat(cid,r){
+  const a=allVals().find(x=>x.cid==cid&&x.regra==r),cur0=S.aj[ajId(cid,r)]||{};const dlg=$('#dlg');
+  dlg.innerHTML=`<h3>${esc(a.num)} · ${r}</h3><p>${esc(a.desc)}<br><span class="sub">${esc(a.det)}</span></p><label>Situação</label><select id="d1">${Object.keys(ST).map(k=>`<option value="${k}" ${(cur0.status||'pendente')==k?'selected':''}>${ST[k]}</option>`).join('')}</select><label>Observação / justificativa</label><textarea id="d2" rows="3">${esc(cur0.obs||'')}</textarea><div class="row" style="margin-top:12px"><button class="p" id="d3">Salvar</button><button class="s" id="d4">Cancelar</button></div>`;
+  dlg.showModal();$('#d4').onclick=()=>dlg.close();$('#d3').onclick=()=>{setStatus(cid,r,$('#d1').value,$('#d2').value);dlg.close();};
+}
+function edit(cid){
+  const c=allCs().find(x=>x.id==cid),o=(S.ov[cid]||{}).f||{};const F=[['num','Número'],['titulo','Título'],['ini','Início (dd/mm/aaaa)'],['fim','Conclusão (dd/mm/aaaa)'],['prazo','Prazo (dias)'],['area','Área requisitante'],['prioridade','Prioridade']];
+  const dlg=$('#dlg');dlg.innerHTML=`<h3>Adequar ${esc(c.num)}</h3><p class="sub">Original → o valor editado entra no CSV exportado.</p>`+F.map(f=>`<label>${f[1]} <span class="sub">(original: ${esc(c[f[0]])})</span></label><input data-f="${f[0]}" value="${esc(o[f[0]]??c[f[0]])}">`).join('')+`<div class="row" style="margin-top:12px"><button class="p" id="d3">Salvar</button><button class="s" id="d4">Cancelar</button></div>`;
+  dlg.showModal();$('#d4').onclick=()=>dlg.close();
+  $('#d3').onclick=()=>{const f={};dlg.querySelectorAll('[data-f]').forEach(i=>{if(i.value.trim()!==c[i.dataset.f])f[i.dataset.f]=i.value.trim();});
+    if(f.fim&&!Core.pdate(f.fim)){S.msg='Data de conclusão inválida.';dlg.close();draw();return;}if(f.ini&&!Core.pdate(f.ini)){S.msg='Data de início inválida.';dlg.close();draw();return;}
+    saveOv(cid,f);dlg.close();};
+}
+init();
+</script>
+</html>

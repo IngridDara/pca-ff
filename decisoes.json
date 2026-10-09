@@ -1,0 +1,283 @@
+{
+ "ajustes": {},
+ "ov": {},
+ "destino": {},
+ "vinc": {
+  "2026:244/2026": {
+   "conf": "alta",
+   "ids": [
+    "000309/2026"
+   ],
+   "obs": ""
+  },
+  "2026:154/2026": {
+   "conf": "alta",
+   "ids": [
+    "000010/2026"
+   ],
+   "obs": "Valor idêntico ao PCA."
+  },
+  "2026:185/2026": {
+   "conf": "alta",
+   "ids": [
+    "000068/2026"
+   ],
+   "obs": ""
+  },
+  "2026:100/2026": {
+   "conf": "alta",
+   "ids": [
+    "000137/2026"
+   ],
+   "obs": "Contratado por dispensa; PCA previa R$ 30 mi, PNCP R$ 16,4 mi."
+  },
+  "2026:122/2026": {
+   "conf": "alta",
+   "ids": [
+    "000164/2026"
+   ],
+   "obs": ""
+  },
+  "2026:117/2026": {
+   "conf": "alta",
+   "ids": [
+    "000025/2026"
+   ],
+   "obs": ""
+  },
+  "2026:86/2026": {
+   "conf": "alta",
+   "ids": [
+    "000071/2026"
+   ],
+   "obs": "Credenciamento; valor homologado acima do PCA."
+  },
+  "2026:129/2026": {
+   "conf": "alta",
+   "ids": [
+    "000043/2026"
+   ],
+   "obs": ""
+  },
+  "2026:111/2026": {
+   "conf": "alta",
+   "ids": [
+    "000082/2026"
+   ],
+   "obs": "PNCP R$ 16 mil vs PCA R$ 140 mil."
+  },
+  "2026:222/2026": {
+   "conf": "alta",
+   "ids": [
+    "000031/2026"
+   ],
+   "obs": ""
+  },
+  "2026:96/2026": {
+   "conf": "alta",
+   "ids": [
+    "000101/2026",
+    "000171/2026"
+   ],
+   "obs": "000101 sem homologação e republicado em 000171."
+  },
+  "2026:220/2026": {
+   "conf": "alta",
+   "ids": [
+    "000224/2026"
+   ],
+   "obs": ""
+  },
+  "2026:131/2026": {
+   "conf": "alta",
+   "ids": [
+    "000008/2026",
+    "000027/2026",
+    "000085/2026"
+   ],
+   "obs": "Mesmo objeto publicado 3 vezes: verificar republicações."
+  },
+  "2026:85/2026": {
+   "conf": "alta",
+   "ids": [
+    "000014/2026"
+   ],
+   "obs": ""
+  },
+  "2026:141/2026": {
+   "conf": "alta",
+   "ids": [
+    "000169/2026"
+   ],
+   "obs": "Credenciamento sem valor informado."
+  },
+  "2026:229/2026": {
+   "conf": "alta",
+   "ids": [
+    "000065/2026",
+    "000067/2026",
+    "000093/2026"
+   ],
+   "obs": "Vale-refeição, vale-alimentação e PCMSO em publicações separadas."
+  },
+  "2026:77/2026": {
+   "conf": "alta",
+   "ids": [
+    "000255/2026",
+    "000305/2026"
+   ],
+   "obs": "Duas publicações do mesmo objeto, sem homologação."
+  },
+  "2026:160/2026": {
+   "conf": "provável",
+   "ids": [
+    "000036/2026"
+   ],
+   "obs": "Mesma publicação pode corresponder à 116/2026: possível duplicidade no PCA."
+  },
+  "2026:116/2026": {
+   "conf": "provável",
+   "ids": [
+    "000036/2026"
+   ],
+   "obs": "Mesma publicação pode corresponder à 160/2026: possível duplicidade no PCA."
+  },
+  "2026:40/2026": {
+   "conf": "provável",
+   "ids": [
+    "000051/2026",
+    "000052/2026"
+   ],
+   "obs": "ARPs de EPI com valores muito acima do PCA."
+  },
+  "2026:42/2026": {
+   "conf": "provável",
+   "ids": [
+    "000165/2026"
+   ],
+   "obs": "Também pode ser a 60/2026."
+  },
+  "2026:60/2026": {
+   "conf": "provável",
+   "ids": [
+    "000165/2026"
+   ],
+   "obs": "Também pode ser a 42/2026."
+  },
+  "2026:124/2026": {
+   "conf": "provável",
+   "ids": [
+    "000307/2026"
+   ],
+   "obs": "Publicação cobre só o PE Águas da Prata."
+  },
+  "2026:134/2026": {
+   "conf": "provável",
+   "ids": [
+    "000311/2026"
+   ],
+   "obs": "Publicação cobre a sede (PMOC)."
+  },
+  "2026:216/2026": {
+   "conf": "provável",
+   "ids": [
+    "000086/2026",
+    "000087/2026",
+    "000218/2026"
+   ],
+   "obs": "Adesões à ARP Patrulha Agrícola: confirmar qual PCA corresponde a cada uma."
+  },
+  "2026:219/2026": {
+   "conf": "provável",
+   "ids": [
+    "000086/2026",
+    "000087/2026",
+    "000218/2026"
+   ],
+   "obs": "Adesões à ARP Patrulha Agrícola: confirmar qual PCA corresponde a cada uma."
+  },
+  "2026:232/2026": {
+   "conf": "provável",
+   "ids": [
+    "000086/2026",
+    "000087/2026",
+    "000218/2026"
+   ],
+   "obs": "Adesões à ARP Patrulha Agrícola: confirmar qual PCA corresponde a cada uma."
+  },
+  "2026:147/2026": {
+   "conf": "provável",
+   "ids": [
+    "000081/2026"
+   ],
+   "obs": "Registro de preços de 40 caminhonetes."
+  },
+  "2026:90/2026": {
+   "conf": "provável",
+   "ids": [
+    "000252/2026"
+   ],
+   "obs": "Inexigibilidade da plataforma de vendas online."
+  },
+  "2026:224/2026": {
+   "conf": "provável",
+   "ids": [
+    "000136/2026"
+   ],
+   "obs": ""
+  },
+  "2026:94/2026": {
+   "conf": "provável",
+   "ids": [
+    "000022/2026",
+    "000176/2026"
+   ],
+   "obs": "Licenças Revit e gestão de projetos."
+  },
+  "2026:123/2026": {
+   "conf": "provável",
+   "ids": [
+    "000212/2026"
+   ],
+   "obs": "Apoio técnico-administrativo com dedicação exclusiva."
+  },
+  "2026:108/2026": {
+   "conf": "provável",
+   "ids": [
+    "000012/2026",
+    "000023/2026",
+    "000029/2026",
+    "000030/2026",
+    "000041/2026",
+    "000044/2026",
+    "000064/2026",
+    "000080/2026",
+    "000089/2026",
+    "000098/2026",
+    "000117/2026",
+    "000118/2026",
+    "000122/2026",
+    "000130/2026",
+    "000175/2026",
+    "000177/2026",
+    "000178/2026",
+    "000179/2026",
+    "000180/2026",
+    "000181/2026",
+    "000183/2026",
+    "000184/2026",
+    "000186/2026",
+    "000192/2026",
+    "000193/2026",
+    "000198/2026",
+    "000210/2026",
+    "000220/2026",
+    "000221/2026",
+    "000223/2026",
+    "000229/2026",
+    "000242/2026"
+   ],
+   "obs": "32 inexigibilidades de alimentação em UCs: verificar se vêm deste credenciamento."
+  }
+ }
+}
