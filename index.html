@@ -351,7 +351,7 @@ const Store={
   async reenviar(){try{await this.fb.reenviarVerif();S.msg='E-mail de confirmação reenviado para '+this.me.email+'. Confira também a caixa de spam.';}catch(e){S.msg='Não foi possível reenviar agora ('+(e.code||e.message)+'). Aguarde alguns minutos.';}draw();},
   async cadastrar(f){
     if(!f.nome||f.nome.trim().length<3||!f.setor||!f.setor.trim()){S.msg='Informe nome completo e setor.';draw();return;}
-    if(!/^[^@\s]+@[^@\s]*sp\.gov\.br$/i.test((f.email||'').trim())){S.msg='Use o e-mail institucional (terminado em sp.gov.br).';draw();return;}
+    if(!/^[^@\s]+@fflorestal\.sp\.gov\.br$/i.test((f.email||'').trim())){S.msg='Só são aceitos e-mails @fflorestal.sp.gov.br.';draw();return;}
     if(!f.email||!f.senha||f.senha.length<6){S.msg='Informe e-mail e uma senha de pelo menos 6 caracteres.';draw();return;}
     if(f.senha!==f.senha2){S.msg='As senhas não conferem.';draw();return;}
     try{this.cadastrando=true;S.msg='Enviando cadastro…';draw();
@@ -836,11 +836,11 @@ function cfg(){
   const cad=modo==='cadastro';
   return `<div class="acesso"><div class="box">${aviso}
   <h2>${cad?'Pedir cadastro':'Entrar'}</h2>
-  <p class="sub">${cad?'Para revisar o PCA e enviar propostas é preciso ter cadastro. Com e-mail <b>@fflorestal.sp.gov.br</b> o acesso é liberado automaticamente depois que você confirmar o e-mail; os demais e-mails de sp.gov.br são analisados pelo NGI.':'Entre com seu e-mail institucional para iniciar a revisão do PCA. Consultar o painel não exige login.'}</p>
+  <p class="sub">${cad?'Para revisar o PCA e enviar propostas é preciso ter cadastro. <div class="msg" style="margin-top:8px"><b>Só são aceitos e-mails @fflorestal.sp.gov.br.</b> O acesso é liberado automaticamente depois que você confirmar o e-mail.</div>':'Entre com seu e-mail institucional para iniciar a revisão do PCA. Consultar o painel não exige login.'}</p>
   <div class="seg" role="tablist"><button type="button" role="tab" class="${!cad?'on':''}" data-modo="entrar">Já tenho cadastro</button><button type="button" role="tab" class="${cad?'on':''}" data-modo="cadastro">Pedir cadastro</button></div>
   <form id="f_acesso" novalidate>
     ${cad?campo('fm_nome','Nome completo','text','name',f.fm_nome)+campo('fm_setor','Setor / área','text','organization',f.fm_setor):''}
-    ${campo('fm_email','E-mail institucional','email','username',f.fm_email,cad?'Precisa terminar em sp.gov.br':'')}
+    ${campo('fm_email','E-mail institucional','email','username',f.fm_email,cad?'Somente @fflorestal.sp.gov.br':'')}
     <label class="fld" for="fm_senha"><span>Senha</span><span class="pw"><input id="fm_senha" data-fm="fm_senha" type="${S.verSenha?'text':'password'}" autocomplete="${cad?'new-password':'current-password'}" value="${esc(f.fm_senha||'')}"><button type="button" class="s" id="c_ver" aria-label="${S.verSenha?'Ocultar':'Mostrar'} senha">${S.verSenha?'Ocultar':'Mostrar'}</button></span>${cad?'<small class="sub">Mínimo de 6 caracteres</small>':''}</label>
     ${cad?campo('fm_senha2','Repita a senha','password','new-password',f.fm_senha2):''}
     <button class="p full" type="submit" id="${cad?'c_cad':'c_in'}">${cad?'Enviar pedido de cadastro':'Entrar'}</button>
