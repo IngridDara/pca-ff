@@ -630,13 +630,15 @@ function calend(){
 function itens(){return contr();}
 function ger(){
   if(!Store.podeRevisar)return '<div class="box">O painel gerencial é restrito a quem entrou com cadastro aprovado.</div>';
+  const E26=S.ano===2026,GVv=GV.filter(o=>E26||!['a26','contratadas','semcontr','sempca'].includes(o[0]));
+  if(!GVv.some(o=>o[0]===S.vis))S.vis='painel';
   const vis=S.vis,areas=[...new Set(allCsAll().map(c=>c.area).filter(Boolean))].sort(),R=linhas26();
   const n=sit=>R?R.filter(r=>r.sit===sit).length:'—';
   const pend_=allVals().filter(a=>stOf(a)==='pendente').length;
-  const N={a26:R?R.length:'—',contratadas:n(SIT26[0]),semcontr:n(SIT26[2]),sempca:n(SIT26[3]),pend:pend_,painel:'Resumo',cruz:'2026×2027',pncp:S.pn?S.pn.rows.filter(p=>S.ano==='todos'||String(p.ano)===String(S.ano)).length:'—'};
+  const N={a26:R?R.length:'—',contratadas:n(SIT26[0]),semcontr:n(SIT26[2]),sempca:n(SIT26[3]),pend:pend_,painel:'Resumo',cruz:'2026×2027',pncp:S.pn?S.pn.rows.filter(p=>String(p.ano)===String(S.ano)).length:'—'};
   const T={a26:'linhas, PCA 2026 × PNCP',contratadas:'itens contratados (homologados)',semcontr:'sem contratação localizada',sempca:'contratos sem item no PCA',pend:'pendências em aberto',painel:'por regra e por área',cruz:'itens que migram para 2027',pncp:'publicações no PNCP no ano do PCA'};
-  const cards=`<div class="cards big gcards">${GV.map(o=>`<button class="c gv ${vis===o[0]?'on':''}" data-gv="${o[0]}" aria-pressed="${vis===o[0]}"><b>${N[o[0]]}</b><span>${o[1]}<br>${T[o[0]]}</span></button>`).join('')}</div>`;
-  return `<p class="sub">Clique em um quadro para ver os detalhes logo abaixo.</p>`+cards+(['pend','painel'].includes(vis)?`<div class="row"><label class="sub">Área</label><select id="farea"><option value="">Todas as áreas</option>${areas.map(a=>`<option ${S.farea===a?'selected':''}>${esc(a)}</option>`).join('')}</select></div>`:'')+({a26,contratadas:a26,semcontr:a26,sempca:a26,pend,painel,cruz,pncp}[vis])();
+  const cards=`<div class="cards big gcards">${GVv.map(o=>`<button class="c gv ${vis===o[0]?'on':''}" data-gv="${o[0]}" aria-pressed="${vis===o[0]}"><b>${N[o[0]]}</b><span>${o[1]}<br>${T[o[0]]}</span></button>`).join('')}</div>`;
+  return `<p class="sub">Dados do <b>PCA ${S.ano}</b>${E26?'':' (o cruzamento com as contratações de 2026 aparece só no PCA 2026)'}. Clique em um quadro para ver os detalhes logo abaixo.</p>`+cards+(['pend','painel'].includes(vis)?`<div class="row"><label class="sub">Área</label><select id="farea"><option value="">Todas as áreas</option>${areas.map(a=>`<option ${S.farea===a?'selected':''}>${esc(a)}</option>`).join('')}</select></div>`:'')+({a26,contratadas:a26,semcontr:a26,sempca:a26,pend,painel,cruz,pncp}[vis])();
 }
 function coord(){
   const sub=S.csub||'prop',pp=(S.prop||[]).filter(p=>p.status==='pendente').length,cp=(Store.usuarios||[]).filter(u=>u.status==='pendente').length;
@@ -650,10 +652,10 @@ function draw(){
   const tabs=[['cal','Início'],['itens','Revisão'+(recusadasNovas().length?' ('+recusadasNovas().length+')':'')]].concat(Store.podeRevisar?[['ger','Painel gerencial']]:[]).concat(Store.podeRevisar&&!Store.canWrite?[['minhas','Minhas propostas'+(nc?' ('+nc+')':'')]]:[]).concat(Store.canWrite?[['coord','Coordenação'+(pp?' ('+pp+')':'')]]:[]);
   if(!['cal','itens','ger','coord','minhas','cfg'].includes(S.tab)||(S.tab==='coord'&&!Store.canWrite)||(S.tab==='ger'&&!Store.podeRevisar)||(S.tab==='minhas'&&!Store.podeRevisar))S.tab='cal';
     if(!GV.some(o=>o[0]===S.vis))S.vis='a26';
-  if(S.ano==='todos'&&!(S.tab==='ger'&&['pend','pncp'].includes(S.vis)))S.ano=2026;
+  if(S.ano==='todos')S.ano=2026;
   const age=S.pn&&S.pn.coletado?(Date.now()-new Date(S.pn.coletado))/864e5:null;
   let h=`<header><div><h1>Plano de Contratações Anual</h1><div class="sub">Fundação Florestal · NGI coordena, NCP consolida</div></div>
-  <div class="row"><div class="anos" role="group" aria-label="Escolha o PCA"><span class="anos-t">Escolha o PCA:</span>${[2026,2027].map(a=>`<button type="button" data-ano="${a}" class="${a==S.ano?'on':''}" aria-pressed="${a==S.ano}">PCA ${a}</button>`).join('')}${S.tab==='ger'&&['pend','pncp'].includes(S.vis)?`<button type="button" data-ano="todos" class="${S.ano==='todos'?'on':''}" aria-pressed="${S.ano==='todos'}">Todos</button>`:''}</div>
+  <div class="row"><div class="anos" role="group" aria-label="Escolha o PCA"><span class="anos-t">Escolha o PCA:</span>${[2026,2027].map(a=>`<button type="button" data-ano="${a}" class="${a==S.ano?'on':''}" aria-pressed="${a==S.ano}">PCA ${a}</button>`).join('')}</div>
   <button class="hb" data-t="cfg">${Store.me?esc((Store.me.name||'').split(' ')[0]||'Conta'):'Entrar'}</button></div></header>`;
   h+=`<div class="sub" style="margin:-4px 2px 10px">PNCP atualizado em ${S.pn?fmtDT(S.pn.coletado):'—'}${age!=null&&age>10?' · <b class="crit">desatualizado há '+Math.floor(age)+' dias</b>':''} <button class="s" id="rl">Recarregar</button>${Store.canWrite?'':' · suas alterações viram propostas para validação'}${S.pnMsg?' · '+esc(S.pnMsg):''}</div>`;
   if(S.msg&&S.tab!=='cfg')h+=`<div class="msg">${esc(S.msg)}</div>`;
@@ -732,12 +734,12 @@ function cruz(){
 
 function pncp(){
   if(!S.pn)return '<div class="box">Dados do PNCP ainda não carregados. Rode a coleta (pasta "PNCP automático") ou toque em Recarregar.</div>';
-  const P=S.pn.rows;const byid={};P.forEach(p=>byid[p.id]=p);
-  const R=[];yrs().forEach(a=>Core.cruzarPNCP(S.ds[a],P,S.vinc).forEach(r=>{const c=S.ds[a].cs.find(x=>x.num===r.num);R.push({...r,ano:a,c});}));
-  const used=new Set();[2026,2027].filter(a=>S.ds[a]).forEach(a=>Core.cruzarPNCP(S.ds[a],P,S.vinc).forEach(r=>r.ids.forEach(i=>used.add(i))));
+  const P0=S.pn.rows,P=P0.filter(p=>String(p.ano)===String(S.ano));const byid={};P.forEach(p=>byid[p.id]=p);
+  const R=[];yrs().forEach(a=>Core.cruzarPNCP(S.ds[a],P0,S.vinc).forEach(r=>{const c=S.ds[a].cs.find(x=>x.num===r.num);R.push({...r,ano:a,c});}));
+  const used=new Set();[2026,2027].filter(a=>S.ds[a]).forEach(a=>Core.cruzarPNCP(S.ds[a],P0,S.vinc).forEach(r=>r.ids.forEach(i=>used.add(i))));
   const sts=['Contratada (homologada)','Publicada, sem homologação','Sem publicação localizada'];
   const L=R.filter(r=>!S.pst||r.status==S.pst);
-  let h=`<p class="sub">Cruzamento dos PCAs com as publicações da Fundação Florestal no PNCP (${P.length} publicações). "alta/provável" foram conferidas; "sugestão" é automática e precisa de confirmação. Sem publicação localizada não prova que não foi contratado.</p>
+  let h=`<p class="sub">Cruzamento dos PCAs com as publicações da Fundação Florestal no PNCP (${P.length} publicações de ${S.ano}). "alta/provável" foram conferidas; "sugestão" é automática e precisa de confirmação. Sem publicação localizada não prova que não foi contratado.</p>
   <div class="cards">${sts.map(s=>`<div class="c"><b>${R.filter(r=>r.status==s).length}</b><span>${s}</span></div>`).join('')}<div class="c"><b>${P.filter(p=>!used.has(p.id)).length}</b><span>publicações sem item no PCA</span></div></div>
   <div class="row"><select id="pst"><option value="">Situação: todas</option>${sts.map(s=>`<option ${S.pst==s?'selected':''}>${s}</option>`).join('')}</select><span class="sub">${L.length} itens</span></div>
   <div class="tw"><table><tr><th>PCA</th><th>DFD</th><th>Título</th><th>Área</th><th>Valor PCA</th><th>Situação</th><th>Conf.</th><th>PNCP homologado</th><th>Revisão</th><th>Publicações / observação</th></tr>`;
