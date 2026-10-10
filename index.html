@@ -369,7 +369,10 @@ const Store={
 };
 const who=()=>Store.me?Store.me.email:'';
 /* Registro de alterações: exige identificação e justificativa; tudo fica no histórico (auditoria). */
-const JUST_MIN=10;
+const JUST_MIN=10,JUST_PADRAO='Mantido no PCA, sem alteração.';
+const exigeJ=x=>!(x.ap&&x.ap.t==='dest'&&x.ap.v==='manter');
+const justOk=x=>!exigeJ(x)||(x.just||'').trim().length>=JUST_MIN;
+const justFinal=x=>(x.just||'').trim()||(exigeJ(x)?'':JUST_PADRAO);
 function justificar(titulo,antes,depois,rot){
   return new Promise(res=>{
     const d=$('#dj');
@@ -388,7 +391,7 @@ async function registrar(acao,cid,rotulo,antes,depois,ap){
   const c=allCs().find(x=>x.id==cid)||{};
   const base={acao,cid,ref:rotulo,ano:c.ano||'',titulo:c.titulo||'',area:c.area||'',antes:antes||'',depois:depois||'',ap};
   if(!Store.canWrite){if(!Store.podeRevisar){exigeLogin();return false;}return proporAlteracao(base);}
-  const j=await justificar(acao+' · '+rotulo,antes,depois);
+  const j=(ap&&ap.t==='dest'&&ap.v==='manter')?JUST_PADRAO:await justificar(acao+' · '+rotulo,antes,depois);
   if(j===null){draw();return false;}
   const ok=await Store.gravar(ap,{acao,cid,ref:rotulo,antes:antes||'',depois:depois||'',just:j});
   draw();return ok;
@@ -430,7 +433,7 @@ function xMinhas(lote){
 function minhas(){
   const C=Cesta.get(),i=ident(),E=Envios.get();
   return `<div class="box"><b>Quem está propondo</b> ${Store.me?`<p class="sub">${esc(i.nome)} · ${esc(i.setor)} · ${esc(i.email)} (dados da sua conta)</p>`:`<p class="sub">Entre com seu e-mail e senha para enviar. <button class="s" data-t="cfg">Entrar</button></p>`}</div>
-  <div class="tw"><table><thead><tr><th>Item</th><th>O que muda</th><th>Justificativa</th><th></th></tr></thead><tbody>${C.map(p=>`<tr><td><b>${esc(p.ref)}</b><br><span class="sub">${esc(p.titulo)}</span></td><td><span class="sub">${esc(p.acao)}</span><br>De: ${esc(p.antes||'—')}<br><b>Para: ${esc(p.depois||'—')}</b></td><td><textarea data-mj="${p.id}" rows="2" class="${(p.just||'').length>=JUST_MIN?'':'falta'}" placeholder="Justificativa (obrigatória, mínimo ${JUST_MIN} caracteres)" style="width:100%;min-width:200px">${esc(p.just||'')}</textarea></td><td><button class="s" data-rm="${p.id}">Remover</button></td></tr>`).join('')||'<tr><td colspan="4" class="sub">Nenhuma proposta na cesta. Faça revisões na aba Itens do PCA: elas ficam aqui até você enviar.</td></tr>'}</tbody></table></div>
+  <div class="tw"><table><thead><tr><th>Item</th><th>O que muda</th><th>Justificativa</th><th></th></tr></thead><tbody>${C.map(p=>`<tr><td><b>${esc(p.ref)}</b><br><span class="sub">${esc(p.titulo)}</span></td><td><span class="sub">${esc(p.acao)}</span><br>De: ${esc(p.antes||'—')}<br><b>Para: ${esc(p.depois||'—')}</b></td><td><textarea data-mj="${p.id}" rows="2" class="${justOk(p)?'':'falta'}" placeholder="${exigeJ(p)?'Justificativa (obrigatória, mínimo '+JUST_MIN+' caracteres)':'Justificativa (opcional ao manter no PCA)'}" style="width:100%;min-width:200px">${esc(p.just||'')}</textarea></td><td><button class="s" data-rm="${p.id}">Remover</button></td></tr>`).join('')||'<tr><td colspan="4" class="sub">Nenhuma proposta na cesta. Faça revisões na aba Itens do PCA: elas ficam aqui até você enviar.</td></tr>'}</tbody></table></div>
   <div class="row" style="margin-top:12px"><button class="p" id="mi_env" ${C.length?'':'disabled'}>Enviar todas à coordenação (${C.length})</button><button class="s" id="mi_x">Baixar tabela das minhas alterações</button></div>
   ${E.length?`<h3>Já enviadas</h3><div class="tw"><table><thead><tr><th>Protocolo</th><th>Data</th><th>Propostas</th><th></th></tr></thead><tbody>${E.map(e=>`<tr><td><b>${esc(e.lote)}</b></td><td>${fmtDT(e.at)}</td><td>${e.n}</td><td>${e.itens?`<button class="s" data-mx="${esc(e.lote)}">Baixar</button>`:''}</td></tr>`).join('')}</tbody></table></div>`:''}`;
 }
@@ -438,11 +441,11 @@ async function enviarCesta(){
   const C=Cesta.get(),i=ident();
   if(!C.length)return;
   if(!identOk(i)){exigeLogin();return;}
-  const sj=C.filter(x=>(x.just||'').length<JUST_MIN);
+  const sj=C.filter(x=>!justOk(x));
   if(sj.length){S.msg=sj.length+' proposta(s) sem justificativa (mínimo '+JUST_MIN+' caracteres). Preencha na coluna Justificativa antes de enviar.';draw();return;}
   if(!Store.fb){S.msg='Sem conexão com o servidor: suas propostas continuam guardadas aqui. Tente novamente em instantes.';draw();return;}
   const lote='PCA-'+new Date().toISOString().slice(0,10).replace(/-/g,'')+'-'+rid().slice(0,5).toUpperCase();
-  const itens=C.map(p=>({nome:i.nome,setor:i.setor,email:i.email,acao:String(p.acao),cid:String(p.cid),ref:String(p.ref),ano:String(p.ano||''),titulo:String(p.titulo||''),area:String(p.area||''),antes:String(p.antes||''),depois:String(p.depois||''),just:p.just,ap:p.ap}));
+  const itens=C.map(p=>({nome:i.nome,setor:i.setor,email:i.email,acao:String(p.acao),cid:String(p.cid),ref:String(p.ref),ano:String(p.ano||''),titulo:String(p.titulo||''),area:String(p.area||''),antes:String(p.antes||''),depois:String(p.depois||''),just:justFinal(p),ap:p.ap}));
   S.msg='Enviando…';draw();
   try{await Store.fb.enviar(lote,itens);Cesta.set([]);Envios.add({lote,at:new Date().toISOString(),n:itens.length,itens:itens.map(x=>({ref:x.ref,titulo:x.titulo,area:x.area,acao:x.acao,antes:x.antes,depois:x.depois,just:x.just,ano:x.ano}))});
     S.msg='Enviado! Protocolo '+lote+' ('+itens.length+' proposta(s)). A coordenação já as recebe no painel. Baixe a tabela das suas alterações em "Minhas propostas".';}
@@ -511,7 +514,7 @@ const allVals=()=>{const ok=new Set(allCs().map(c=>c.id));return yrs().flatMap(a
 const destOf=c=>(S.dest[c.id]||{}).d||'';
 const rascunho=c=>Cesta.get().find(x=>x.ch==='dest|'+c.id);
 function toast(m){let t=$('#toast');if(!t){t=document.createElement('div');t.id='toast';t.className='toast';t.setAttribute('role','status');document.body.appendChild(t);}t.textContent=m;t.style.display='block';clearTimeout(toast.h);toast.h=setTimeout(()=>{t.style.display='none';},3500);}
-function destSel(c){const r=rascunho(c),v=r?r.ap.v:destOf(c);return `<select data-dest="${esc(c.id)}"${r?' class="rasc"':''}>${Object.keys(DEST).map(k=>`<option value="${k}" ${v==k?'selected':''}>${dLabel(k,c.ano)}</option>`).join('')}</select>${r?`<input data-rj="${esc(c.id)}" class="${(r.just||'').length>=JUST_MIN?'':'falta'}" placeholder="Justificativa (obrigatória)" value="${esc(r.just||'')}"><div class="row" style="margin:4px 0 0">${(r.just||'').length>=JUST_MIN?'<span class="st-ok">✓ Revisão guardada</span> <span class="sub">(falta enviar à coordenação)</span>':'<span class="st-pen">Falta a justificativa</span>'}<button class="s" data-rg="${esc(c.id)}">Gravar revisão</button></div>`:''}`}
+function destSel(c){const r=rascunho(c),v=r?r.ap.v:destOf(c);return `<select data-dest="${esc(c.id)}"${r?' class="rasc"':''}>${Object.keys(DEST).map(k=>`<option value="${k}" ${v==k?'selected':''}>${dLabel(k,c.ano)}</option>`).join('')}</select>${r?`<input data-rj="${esc(c.id)}" class="${justOk(r)?'':'falta'}" placeholder="${exigeJ(r)?'Justificativa (obrigatória)':'Justificativa (opcional ao manter no PCA)'}" value="${esc(r.just||'')}"><div class="row" style="margin:4px 0 0">${justOk(r)?'<span class="st-ok">✓ Revisão guardada</span> <span class="sub">(falta enviar à coordenação)</span>':'<span class="st-pen">Falta a justificativa</span>'}<button class="s" data-rg="${esc(c.id)}">Gravar revisão</button></div>`:''}`}
 async function setDest(c,d){
   if(Store.canWrite){const ok=await registrar('Revisão do item',c.id,c.num,dLabel(destOf(c),c.ano)||'A definir',dLabel(d,c.ano),{t:'dest',cid:c.id,v:d});if(ok)toast('Revisão do DFD '+c.num+' gravada.');return ok;}
   if(!Store.podeRevisar){exigeLogin();return;}
@@ -661,10 +664,10 @@ function contr(){
   const ano=S.ano==='todos'?2026:S.ano;
   const cs=aRevisar(allCs(),ano).filter(c=>(!q||(c.num+c.titulo+c.area).toLowerCase().includes(q))&&(S.verRev||destOf(c)===''));
   const pc={};allVals().forEach(a=>{if(stOf(a)=='pendente')pc[a.cid]=(pc[a.cid]||0)+1;});
-  const C_=Cesta.get().filter(x=>x.ch&&x.ch.startsWith('dest|')),semJ=C_.filter(x=>(x.just||'').length<JUST_MIN).length;
+  const C_=Cesta.get().filter(x=>x.ch&&x.ch.startsWith('dest|')),semJ=C_.filter(x=>!justOk(x)).length;
   let h=`<details class="box guia" ${S.guiaFechada?'':'open'}><summary><b>Como usar a Revisão</b> <span class="sub">(clique para abrir ou fechar)</span></summary>
   <p class="sub"><b>Esta tela é só para revisar o que ainda não foi contratado.</b> Quando uma revisão é aprovada, o item sai desta lista. ${ano===2026&&contratados26()?'As contratações já homologadas no PNCP não aparecem aqui (veja-as no Painel gerencial).':'Os dados do PNCP ainda não foram carregados; todos os itens são listados.'}</p>
-  <p class="sub">Para cada contratação, escolha uma opção na coluna <b>Revisão</b>. Toda escolha precisa de uma justificativa.</p>
+  <p class="sub">Para cada contratação, escolha uma opção na coluna <b>Revisão</b>. Toda escolha precisa de uma justificativa, <b>exceto Manter no PCA</b>, em que ela é opcional.</p>
   <ul class="guia-l"><li><b>Manter no PCA ${ano}:</b> a contratação continua necessária e será realizada ainda neste exercício.</li>
   <li><b>Atualizar para o PCA ${ano+1}:</b> a necessidade continua, mas não será contratada neste exercício. O item será levado ao PCA seguinte. Informe o motivo (por exemplo, falta de instrução ou de recurso).</li>
   <li><b>Contratação antecipada:</b> a contratação será realizada antes da data prevista no PCA. Informe na justificativa a nova data pretendida e o motivo da antecipação.</li>
@@ -841,9 +844,9 @@ function bind(){
   document.querySelectorAll('[data-rj]').forEach(e=>e.onchange=()=>{const it=Cesta.get().find(x=>x.ch==='dest|'+e.dataset.rj);if(it){salvaJ(it.id,e.value);e.classList.toggle('falta',e.value.trim().length<JUST_MIN);}});
   document.querySelectorAll('[data-rg]').forEach(b=>b.onclick=()=>{const row=b.closest('td'),inp=row&&row.querySelector('[data-rj]');if(inp){const it=Cesta.get().find(x=>x.ch==='dest|'+inp.dataset.rj);if(it)salvaJ(it.id,inp.value);}
     const it=Cesta.get().find(x=>x.ch==='dest|'+b.dataset.rg);
-    if(!it||(it.just||'').length<JUST_MIN){toast('Escreva a justificativa (mínimo '+JUST_MIN+' caracteres) para gravar.');if(inp)inp.focus();return;}
+    if(!it||!justOk(it)){toast('Escreva a justificativa (mínimo '+JUST_MIN+' caracteres) para gravar.');if(inp)inp.focus();return;}
     draw();toast('Revisão do DFD '+it.ref+' gravada. Quando terminar, clique em Enviar revisão à coordenação.');});
-  const re=$('#rv_env');if(re)re.onclick=()=>{const C=Cesta.get();if(!C.length)return;const sj=C.filter(x=>(x.just||'').length<JUST_MIN).length;
+  const re=$('#rv_env');if(re)re.onclick=()=>{const C=Cesta.get();if(!C.length)return;const sj=C.filter(x=>!justOk(x)).length;
     if(!identOk(ident())){exigeLogin();}
     else if(sj){S.tab='minhas';S.msg=sj+' revisão(ões) sem justificativa: complete antes de enviar.';window.scrollTo(0,0);draw();}
     else{window.scrollTo(0,0);enviarCesta();}};
