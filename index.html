@@ -28,6 +28,7 @@ button.p{background:var(--ac);color:#fff;border-color:var(--ac);cursor:pointer}b
 .barra{display:flex;gap:12px;flex-wrap:wrap;align-items:center;background:var(--ac2);position:sticky;top:0;z-index:5}
 .hb{background:rgba(255,255,255,.14);color:#fff;border:1px solid rgba(255,255,255,.45);border-radius:8px;padding:6px 12px;font:inherit;font-size:13px;cursor:pointer}.hb:hover{background:rgba(255,255,255,.25)}
 .agora{border-left:5px solid var(--ac);background:var(--ac2)}.agora h2{margin:2px 0 6px;font-size:20px}
+.gscroll{overflow-x:auto;margin:6px 0 10px;border:1px solid var(--bd);border-radius:10px;background:var(--card)}.gantt{min-width:760px;padding:6px 10px}.grow{display:flex;align-items:center;min-height:44px;border-bottom:1px solid var(--bd)}.grow:last-child{border-bottom:0}.glab{width:210px;flex:none;padding-right:10px;display:flex;flex-direction:column;font-size:12.5px}.gcan{position:relative;flex:1;height:34px}.ghead .gcan{height:22px}.ghead{min-height:24px}.ghead span{position:absolute;top:2px;font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em;padding-left:4px;border-left:1px solid var(--bd);box-sizing:border-box;height:20px}.gl{position:absolute;top:0;bottom:0;border-left:1px solid var(--bd);opacity:.6}.ghoje{position:absolute;top:-4px;bottom:-4px;border-left:2px solid var(--crit);z-index:2}.gbar{position:absolute;top:6px;height:22px;border-radius:6px;background:var(--ac);color:#fff;font-size:11px;display:flex;align-items:center;padding:0 6px;white-space:nowrap;overflow:hidden;box-sizing:border-box}.gbar.fut{background:var(--ac2);color:var(--tx);border:1px solid var(--ac)}.gbar.enc{background:var(--bd);color:var(--mut)}.gbar.and{box-shadow:0 0 0 2px var(--ac2)}
 .tl{border-left:2px solid var(--bd);margin:10px 0 16px 8px;padding-left:18px}.tli{position:relative;padding:8px 0}.tli .dot{position:absolute;left:-26px;top:13px;width:14px;height:14px;border-radius:50%;background:var(--card);border:2px solid var(--bd)}.tli.enc .dot{background:var(--ac);border-color:var(--ac)}.tli.and .dot{border-color:var(--ac);box-shadow:0 0 0 4px var(--ac2)}.tli.sem,.tli.fut{opacity:.8}
 .bar{height:8px;border-radius:4px;background:var(--bd);overflow:hidden;min-width:80px}.bar i{display:block;height:100%;background:var(--ac)}
 .box{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:14px;margin-bottom:12px}
@@ -347,7 +348,6 @@ const Store={
     const D=this.data;D.ajustes={...(j.ajustes||{})};D.ov={...(j.ov||{})};D.destino={...(j.destino||{})};D.vinc={...(j.vinc||{})};
     if(this.fb){try{(await this.fb.listDecisoes()).forEach(x=>{if(SLOT[x.t])D[SLOT[x.t]][x.k]=x.v;});}
       catch(e){S.msg='Não consegui ler as decisões do servidor ('+(e.code||e.message)+'). Exibindo a base inicial.';}}
-    if(this.fb){try{S.cal=await this.fb.listCalendario();}catch(e){}}
     this.sync();
   },
   /* grava uma decisão (só validador) + registro no histórico */
@@ -532,9 +532,9 @@ const marcosDecreto=ano=>{const E=ano-1,d=(m,x)=>E+'-'+m+'-'+x,D='Decreto 67.689
  {nome:'Adequação no sistema (PGC)',resp:'NGI / NCP',ini:d('11','05'),fim:d('11','11'),desc:'Dentro da janela legal do art. 14, I. Lançamento no PGC das alterações aprovadas.'},
  {nome:'Publicação do PCA revisado',resp:'NCP',ini:d('11','12'),fim:d('11','30'),desc:'Divulgação e publicação no PNCP até 15 dias após o encerramento da revisão (art. 13, parágrafo único).'},
  {nome:'Revisão após a publicação da Lei Orçamentária Anual',resp:'NGI / áreas requisitantes',ini:'',fim:'',desc:D+'art. 14, II: na quinzena posterior à publicação da LOA (informe as datas quando a LOA for publicada).'},
- {nome:'Relatórios de gestão de riscos da execução',resp:'Áreas requisitantes',ini:d('07','01'),fim:d('11','30'),desc:D+'art. 18, §§ 1º e 2º: a partir de julho, com apresentação em julho, setembro e novembro.'}
+ {continua:true,nome:'Relatórios de gestão de riscos da execução',resp:'Áreas requisitantes',ini:d('07','01'),fim:d('11','30'),desc:D+'art. 18, §§ 1º e 2º: a partir de julho, com apresentação em julho, setembro e novembro.'}
 ].map((m,i)=>({id:'m'+(i+1),...m}));};
-const marcosDe=ano=>((S.cal||{})[ano]&&(S.cal||{})[ano].length)?S.cal[ano]:marcosDecreto(ano);
+const marcosDe=ano=>marcosDecreto(ano); /* calendário fixo, definido pelo decreto: não é editável */
 const dia=v=>v?new Date(v+'T00:00:00'):null;
 const fmtD=v=>v?dia(v).toLocaleDateString('pt-BR'):'—';
 function statusMarco(m){
@@ -545,14 +545,32 @@ function statusMarco(m){
   const r=b?Math.round((b-h)/864e5):null;
   return {k:'and',t:'Em andamento',c:'med',r};
 }
+function gantt(M,st,E){
+  const hoje=new Date();hoje.setHours(0,0,0,0);
+  const ini0=new Date(E,E===hoje.getFullYear()?hoje.getMonth():9,1),fim0=new Date(E,11,31),T=Math.round((fim0-ini0)/864e5)+1;
+  const pos=dt=>Math.max(0,Math.min(100,(dt-ini0)/864e5/T*100));
+  const meses=[];for(let m=ini0.getMonth();m<12;m++){const a=new Date(E,m,1),z=new Date(E,m+1,1);meses.push({n:a.toLocaleDateString('pt-BR',{month:'short'}).replace('.',''),l:pos(a),w:pos(z)-pos(a)+(m===11?0.0:0)});}
+  const rows=[],enc=[],sem=[];
+  M.forEach((m,i)=>{const a=dia(m.ini),z=dia(m.fim);
+    if(!a&&!z){sem.push(m);return;}
+    const f=z||a,i0=a||z;if(f<ini0){enc.push({m,i});return;}
+    rows.push({m,i,l:pos(i0<ini0?ini0:i0),r:pos(new Date(f.getTime()+864e5)),ponto:!a||(a.getTime()===z.getTime())});});
+  const hojeL=pos(hoje);
+  let h=`<div class="gscroll"><div class="gantt"><div class="grow ghead"><div class="glab"></div><div class="gcan">${meses.map(x=>`<span style="left:${x.l}%;width:${x.w}%">${x.n}</span>`).join('')}</div></div>`;
+  h+=rows.map(({m,i,l,r,ponto})=>`<div class="grow"><div class="glab"><b>${i+1}. ${esc(m.nome)}</b><span class="sub">${esc(m.resp||'')}</span></div><div class="gcan">${meses.map(x=>`<i class="gl" style="left:${x.l}%"></i>`).join('')}${hoje>=ini0?`<i class="ghoje" style="left:${hojeL}%"></i>`:''}<div class="gbar ${st[i].k}" style="left:${l}%;width:${Math.max(r-l,1.2)}%" title="${esc(m.nome)}"><span>${ponto&&!m.ini?'até '+fmtD(m.fim):fmtD(m.ini)+' a '+fmtD(m.fim)}</span></div></div></div>`).join('');
+  h+='</div></div>';
+  if(enc.length)h+=`<p class="sub"><b>Já encerradas neste ano:</b> ${enc.map(({m,i})=>(i+1)+'. '+esc(m.nome)+' ('+fmtD(m.fim)+')').join(' · ')}</p>`;
+  if(sem.length)h+=`<p class="sub"><b>Sem data definida:</b> ${sem.map(m=>esc(m.nome)).join(' · ')}</p>`;
+  return h;
+}
 function calend(){
-  const ano=S.ano==='todos'?2026:S.ano,M=marcosDe(ano),st=M.map(statusMarco),atual=M.findIndex((m,i)=>st[i].k==='and');
+  const E=new Date().getFullYear(),anoCal=E+1,M=marcosDe(anoCal),st=M.map(statusMarco),atual=M.findIndex((m,i)=>st[i].k==='and'&&!m.continua),prox=atual>=0?-1:M.findIndex((m,i)=>st[i].k==='fut'&&!m.continua);
+  const ano=S.ano==='todos'?2026:S.ano;
   const d=S.ds[ano],v=S.val[ano]||[];
   let h='',big_='';
-  if(d){const comPend0=0;}
-  if(atual>=0){const m=M[atual],r=st[atual].r;h+=`<div class="box agora"><span class="sub">Agora</span><h2>${esc(m.nome)}</h2><div>${r==null?'':r<0?'':r===0?'<b>Termina hoje.</b> ':'Faltam <b>'+r+' dia(s)</b> · '}até ${fmtD(m.fim)} · responsável: ${esc(m.resp||'—')}</div>${m.desc?'<div class="sub">'+esc(m.desc)+'</div>':''}</div>`;}
-  else if(M.every((m,i)=>st[i].k==='sem'))h+=`<div class="box agora"><span class="sub">Calendário do PCA ${ano}</span><h2>Datas ainda não definidas</h2><div class="sub">${Store.me&&Store.me.admin?'Clique em "Editar calendário" para informar início e fim de cada etapa.':'A coordenação do NGI ainda vai divulgar as datas de cada etapa.'}</div></div>`;
-  h+=`<div class="row"><h3 style="margin:0">Calendário do PCA ${ano} <span class="sub">· prazos do Decreto 67.689/2023 · elaboração em ${ano-1}; a divisão da revisão entre áreas, NGI, sistema e publicação é proposta interna, editável</span></h3>${Store.me&&Store.me.admin?'<button class="s" id="cal_ed">Editar calendário</button>':''}</div><div class="tl">${M.map((m,i)=>`<div class="tli ${st[i].k}"><div class="dot"></div><div><b>${i+1}. ${esc(m.nome)}</b> <span class="tag ${st[i].c}">${st[i].t}</span><br><span class="sub">${m.ini||m.fim?fmtD(m.ini)+' a '+fmtD(m.fim)+' · ':''}${esc(m.resp||'')}</span>${m.desc?'<br><span class="sub">'+esc(m.desc)+'</span>':''}</div></div>`).join('')}</div>`;
+  if(atual>=0){const m=M[atual],r=st[atual].r;h+=`<div class="box agora"><span class="sub">Agora · PCA ${anoCal}</span><h2>${esc(m.nome)}</h2><div>${r==null?'':r<0?'':r===0?'<b>Termina hoje.</b> ':'Faltam <b>'+r+' dia(s)</b> · '}até ${fmtD(m.fim)} · responsável: ${esc(m.resp||'—')}</div>${m.desc?'<div class="sub">'+esc(m.desc)+'</div>':''}</div>`;}
+  if(prox>=0){const m=M[prox],r=Math.round((dia(m.ini)-new Date().setHours(0,0,0,0))/864e5);h+=`<div class="box agora"><span class="sub">Próxima etapa · PCA ${anoCal}</span><h2>${esc(m.nome)}</h2><div>Começa em <b>${fmtD(m.ini)}</b>${r>0?' (faltam <b>'+r+' dia(s)</b>)':''} · até ${fmtD(m.fim)} · responsável: ${esc(m.resp||'—')}</div>${m.desc?'<div class="sub">'+esc(m.desc)+'</div>':''}</div>`;}
+  h+=`<h3 style="margin:14px 0 4px">Calendário do PCA ${anoCal} até o fim de ${E}</h3><p class="sub" style="margin:0 0 8px">Prazos do Decreto 67.689/2023; a divisão da revisão entre áreas, NGI, sistema e publicação é a programação interna.</p>`+gantt(M,st,E)+`<details class="box"><summary><b>Detalhe de cada etapa</b></summary><div class="tl">${M.map((m,i)=>`<div class="tli ${st[i].k}"><div class="dot"></div><div><b>${i+1}. ${esc(m.nome)}</b> <span class="tag ${st[i].c}">${st[i].t}</span><br><span class="sub">${m.ini||m.fim?fmtD(m.ini)+' a '+fmtD(m.fim)+' · ':''}${esc(m.resp||'')}</span>${m.desc?'<br><span class="sub">'+esc(m.desc)+'</span>':''}</div></div>`).join('')}</div></details>`;
   if(d){
     const comPend=new Set(v.filter(a=>stOf(a)==='pendente').map(a=>a.cid)),crit=new Set(v.filter(a=>a.sev==='crit'&&stOf(a)==='pendente').map(a=>a.cid));
     const semDest=d.cs.filter(c=>destOf(c)==='').length,propP=(S.prop||[]).filter(p=>p.status==='pendente').length;
@@ -565,23 +583,6 @@ function calend(){
     h+=`<h3>O que falta por área</h3><div class="tw"><table><thead><tr><th>Área requisitante</th><th>Contratações</th><th>Com pendência</th><th>Críticas</th><th>Sem revisão</th><th></th></tr></thead><tbody>${Object.entries(ar).sort((a,b)=>b[1].p-a[1].p||b[1].t-a[1].t).map(([k,x])=>`<tr><td>${esc(k)}</td><td>${x.n}</td><td>${x.p?'<b>'+x.p+'</b>':'<span class="ok">0 ✓</span>'}</td><td>${x.cr||'0'}</td><td>${x.sd}</td><td><button class="s" data-go="${esc(k)}">Ver itens</button></td></tr>`).join('')}</tbody></table></div>`;
   }
   return big_+h;
-}
-function editCal(){
-  const ano=S.ano==='todos'?2026:S.ano;let M=marcosDe(ano).map(m=>({...m}));const dlg=$('#dlg');
-  const render=()=>{dlg.innerHTML=`<h3>Calendário do PCA ${ano}</h3><p class="sub">Informe início e fim de cada etapa. Etapas sem data aparecem como "Sem data".</p>
-  ${M.map((m,i)=>`<div class="box" style="padding:10px"><input data-m="${i}|nome" value="${esc(m.nome)}" style="width:100%;font-weight:600" placeholder="Nome da etapa"><div class="row" style="margin-top:6px"><label class="sub">Início <input type="date" data-m="${i}|ini" value="${esc(m.ini)}"></label><label class="sub">Fim <input type="date" data-m="${i}|fim" value="${esc(m.fim)}"></label><input data-m="${i}|resp" value="${esc(m.resp||'')}" placeholder="Responsável"><button class="s" data-mr="${i}">Remover</button></div><input data-m="${i}|desc" value="${esc(m.desc||'')}" style="width:100%" placeholder="Observação (opcional)"></div>`).join('')}
-  <div class="row"><button class="s" id="m_add">+ Adicionar etapa</button></div><div class="sub" id="m_err" style="color:var(--crit)"></div><div class="row" style="margin-top:12px"><button class="p" id="m_ok">Salvar calendário</button><button class="s" id="m_no">Cancelar</button></div>`;
-    dlg.querySelectorAll('[data-m]').forEach(e=>e.onchange=()=>{const [i,k]=e.dataset.m.split('|');M[+i][k]=e.value;});
-    dlg.querySelectorAll('[data-mr]').forEach(b=>b.onclick=()=>{M.splice(+b.dataset.mr,1);render();});
-    $('#m_add').onclick=()=>{M.push({id:'m'+Date.now(),nome:'Nova etapa',resp:'',ini:'',fim:'',desc:''});render();};
-    $('#m_no').onclick=()=>dlg.close();
-    $('#m_ok').onclick=async()=>{
-      if(M.some(m=>!m.nome.trim())){$('#m_err').textContent='Toda etapa precisa de um nome.';return;}
-      if(M.some(m=>m.ini&&m.fim&&m.fim<m.ini)){$('#m_err').textContent='Há etapa com fim antes do início.';return;}
-      dlg.close();const j=await justificar('Calendário do PCA '+ano,undefined,undefined,'Motivo da alteração do calendário');if(j===null)return;
-      await Store.salvarCalendario(ano,M,j);draw();};
-  };
-  render();dlg.showModal();
 }
 function itens(){return contr();}
 function ger(){
@@ -654,15 +655,15 @@ function contr(){
   let h=`<details class="box guia" ${S.guiaFechada?'':'open'}><summary><b>Como usar a Revisão</b> <span class="sub">(clique para abrir ou fechar)</span></summary>
   <p class="sub"><b>Esta tela é só para revisar o que ainda não foi contratado.</b> ${ano===2026&&contratados26()?'As contratações já homologadas no PNCP não aparecem aqui (veja-as no Painel gerencial).':'Os dados do PNCP ainda não foram carregados; todos os itens são listados.'}</p>
   <p class="sub">Para cada contratação, escolha uma opção na coluna <b>Revisão</b>. Toda escolha precisa de uma justificativa.</p>
-  <ul class="guia-l"><li><b>Manter no PCA ${ano}:</b> a contratação continua necessária e será realizada ainda neste exercício. Se mudaram datas ou dados, use <b>Adequar</b> ao lado.</li>
+  <ul class="guia-l"><li><b>Manter no PCA ${ano}:</b> a contratação continua necessária e será realizada ainda neste exercício.</li>
   <li><b>Atualizar para o PCA ${ano+1}:</b> a necessidade continua, mas não será contratada neste exercício. O item será levado ao PCA seguinte. Informe o motivo (por exemplo, falta de instrução ou de recurso).</li>
   <li><b>Realizado por outros fins:</b> a necessidade já foi atendida por outro meio (outro processo, outro DFD ou contrato vigente). Na justificativa, informe qual.</li>
   <li><b>Cancelar – não é mais necessário:</b> a demanda deixou de existir. Explique por quê.</li></ul>
   ${Store.canWrite?'':'<p class="sub"><b>Você pode revisar vários itens e enviar depois.</b> Cada escolha vira um rascunho nesta tela. Preencha a justificativa na própria linha e, ao terminar, envie tudo de uma vez pelo botão abaixo. Use o filtro de <b>Área</b> para revisar uma área por vez.</p>'}</details>
   ${Store.canWrite?'':`<div class="box barra"><div><b>${cs.filter(c=>rascunho(c)).length} de ${cs.length}</b> itens revisados nesta lista<br><span class="sub">${C_.length} em rascunho${semJ?' · <span class="crit">'+semJ+' sem justificativa</span>':C_.length?' · todos com justificativa':''}. Nada é enviado até você clicar no botão ao lado.</span></div><button class="p" id="rv_env" ${C_.length?'':'disabled'}>Enviar revisão à coordenação (${C_.length})</button></div>`}
-  <div class="row"><label class="sub">Área</label><select id="farea"><option value="">Todas as áreas</option>${[...new Set(allCsAll().map(c=>c.area).filter(Boolean))].sort().map(a=>`<option ${S.farea===a?'selected':''}>${esc(a)}</option>`).join('')}</select><input id="q" placeholder="Buscar DFD, título ou área" value="${esc(S.q)}"><select id="fdest"><option value="">Revisão: todas</option><option value="_" ${S.fdest=='_'?'selected':''}>A definir</option><option value="manter" ${S.fdest=='manter'?'selected':''}>Manter no PCA</option><option value="proximo" ${S.fdest=='proximo'?'selected':''}>Atualizar para o PCA seguinte</option><option value="cancelar" ${S.fdest=='cancelar'?'selected':''}>Cancelar – não é mais necessário</option><option value="outros" ${S.fdest=='outros'?'selected':''}>Realizado por outros fins</option></select><span class="sub">${cs.length} contratações</span></div><div class="tw"><table><tr><th>DFD</th><th>Título</th><th>Área</th><th>Prio.</th><th>Início</th><th>Conclusão</th><th>Valor</th><th>Revisão</th><th></th></tr>`;
+  <div class="row"><label class="sub">Área</label><select id="farea"><option value="">Todas as áreas</option>${[...new Set(allCsAll().map(c=>c.area).filter(Boolean))].sort().map(a=>`<option ${S.farea===a?'selected':''}>${esc(a)}</option>`).join('')}</select><input id="q" placeholder="Buscar DFD, título ou área" value="${esc(S.q)}"><select id="fdest"><option value="">Revisão: todas</option><option value="_" ${S.fdest=='_'?'selected':''}>A definir</option><option value="manter" ${S.fdest=='manter'?'selected':''}>Manter no PCA</option><option value="proximo" ${S.fdest=='proximo'?'selected':''}>Atualizar para o PCA seguinte</option><option value="cancelar" ${S.fdest=='cancelar'?'selected':''}>Cancelar – não é mais necessário</option><option value="outros" ${S.fdest=='outros'?'selected':''}>Realizado por outros fins</option></select><span class="sub">${cs.length} contratações</span></div><div class="tw"><table><tr><th>DFD</th><th>Título</th><th>Área</th><th>Prio.</th><th>Início</th><th>Conclusão</th><th>Valor</th><th>Revisão</th></tr>`;
   cs.slice(0,600).forEach(c=>{const o=(S.ov[c.id]||{}).f||{};const ed=Object.keys(o).length;
-    h+=`<tr><td>${esc(o.num||c.num)}${ed?' <span class="tag ok">editado</span>':''}</td><td>${esc(o.titulo||c.titulo)}</td><td>${esc(c.area)}</td><td>${esc(c.prioridade)}</td><td>${esc(o.ini||c.ini)}</td><td>${esc(o.fim||c.fim)}</td><td>${brl(c.total)}</td><td>${destSel(c)}</td><td><button class="s" data-ed="${esc(c.id)}">Adequar</button></td></tr>`;});
+    h+=`<tr><td>${esc(o.num||c.num)}${ed?' <span class="tag ok">editado</span>':''}</td><td>${esc(o.titulo||c.titulo)}</td><td>${esc(c.area)}</td><td>${esc(c.prioridade)}</td><td>${esc(o.ini||c.ini)}</td><td>${esc(o.fim||c.fim)}</td><td>${brl(c.total)}</td><td>${destSel(c)}</td></tr>`;});
   return h+'</table></div>';
 }
 function cruz(){
@@ -803,7 +804,6 @@ function bind(){
   document.querySelectorAll('[data-cs]').forEach(b=>b.onclick=()=>{S.csub=b.dataset.cs;draw();});
   document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{S.farea=b.dataset.go;S.tab='itens';window.scrollTo(0,0);draw();});
   const mx=$('#mi_x');if(mx)mx.onclick=()=>xMinhas();document.querySelectorAll('[data-mx]').forEach(b=>b.onclick=()=>xMinhas(b.dataset.mx));
-  const ce=$('#cal_ed');if(ce)ce.onclick=editCal;
   document.querySelectorAll('[data-modo]').forEach(b=>b.onclick=()=>{S.cfgModo=b.dataset.modo;S.msg='';draw();});
   const F_=()=>S.fm||{};
   const ci=$('#c_in');if(ci)ci.onclick=()=>Store.login((F_().fm_email||'').trim(),F_().fm_senha||'');

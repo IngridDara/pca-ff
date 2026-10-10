@@ -68,12 +68,6 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Calendário do PCA: leitura pública; só a administradora edita.
-    match /calendario/{ano} {
-      allow read: if true;
-      allow write: if admin() && request.resource.data.keys().hasOnly(['marcos','at']);
-    }
-
     // Decisões já validadas: leitura pública (o painel mostra a todos); gravação só da coordenação.
     match /decisoes/{id} {
       allow read: if true;
