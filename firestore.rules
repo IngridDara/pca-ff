@@ -33,19 +33,23 @@ service cloud.firestore {
         && request.resource.data.criadoEm == request.time
         && request.resource.data.nome is string && request.resource.data.nome.size() >= 3 && request.resource.data.nome.size() <= 120
         && request.resource.data.setor is string && request.resource.data.setor.size() >= 1 && request.resource.data.setor.size() <= 120
-        && request.resource.data.email is string && request.resource.data.email.size() <= 200;
+        && request.resource.data.email is string && request.resource.data.email.size() <= 200
+        && request.resource.data.email.matches('^[^@ ]+@[^@ ]*sp\\.gov\\.br$');
       allow update: if admin()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','por','decididoEm'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','por','decididoEm','papel'])
         && request.resource.data.status in ['aprovado','recusado','revogado'];
       allow delete: if false;
     }
 
-    // Propostas: qualquer pessoa envia (sem login); só a coordenação lê e decide.
+    // Propostas: só envia quem está logado e com cadastro aprovado; só a coordenação lê e decide.
     match /propostas/{id} {
       allow read: if validador();
-      allow create: if request.resource.data.keys().hasOnly(
-            ['lote','nome','setor','email','acao','cid','ref','ano','titulo','area','antes','depois','just','ap','status','criadoEm'])
-        && request.resource.data.keys().hasAll(['lote','nome','setor','email','acao','cid','ref','just','ap','status','criadoEm'])
+      allow create: if request.auth != null
+        && get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.status == 'aprovado'
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(
+            ['uid','lote','nome','setor','email','acao','cid','ref','ano','titulo','area','antes','depois','just','ap','status','criadoEm'])
+        && request.resource.data.keys().hasAll(['uid','lote','nome','setor','email','acao','cid','ref','just','ap','status','criadoEm'])
         && request.resource.data.status == 'pendente'
         && request.resource.data.criadoEm == request.time
         && request.resource.data.nome is string && request.resource.data.nome.size() >= 3 && request.resource.data.nome.size() <= 120

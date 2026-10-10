@@ -28,7 +28,7 @@ button.p{background:var(--ac);color:#fff;border-color:var(--ac);cursor:pointer}b
 .barra{display:flex;gap:12px;flex-wrap:wrap;align-items:center;background:var(--ac2);position:sticky;top:0;z-index:5}
 .hb{background:rgba(255,255,255,.14);color:#fff;border:1px solid rgba(255,255,255,.45);border-radius:8px;padding:6px 12px;font:inherit;font-size:13px;cursor:pointer}.hb:hover{background:rgba(255,255,255,.25)}
 .agora{border-left:5px solid var(--ac);background:var(--ac2)}.agora h2{margin:2px 0 6px;font-size:20px}
-.gscroll{overflow-x:auto;margin:6px 0 10px;border:1px solid var(--bd);border-radius:10px;background:var(--card)}.gantt{min-width:760px;padding:6px 10px}.grow{display:flex;align-items:center;min-height:44px;border-bottom:1px solid var(--bd)}.grow:last-child{border-bottom:0}.glab{width:210px;flex:none;padding-right:10px;display:flex;flex-direction:column;font-size:12.5px}.gcan{position:relative;flex:1;height:34px}.ghead .gcan{height:22px}.ghead{min-height:24px}.ghead span{position:absolute;top:2px;font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em;padding-left:4px;border-left:1px solid var(--bd);box-sizing:border-box;height:20px}.gl{position:absolute;top:0;bottom:0;border-left:1px solid var(--bd);opacity:.6}.ghoje{position:absolute;top:-4px;bottom:-4px;border-left:2px solid var(--crit);z-index:2}.gbar{position:absolute;top:6px;height:22px;border-radius:6px;background:var(--ac);color:#fff;font-size:11px;display:flex;align-items:center;padding:0 6px;white-space:nowrap;overflow:hidden;box-sizing:border-box}.gbar.fut{background:var(--ac2);color:var(--tx);border:1px solid var(--ac)}.gbar.enc{background:var(--bd);color:var(--mut)}.gbar.and{box-shadow:0 0 0 2px var(--ac2)}
+.gcards .gv{text-align:left;cursor:pointer;font:inherit;color:inherit}.gcards .gv.on{background:var(--ac2);border-color:var(--ac);box-shadow:0 0 0 2px var(--ac)}.gcards .gv:hover{border-color:var(--ac)}.gcards.cards.big{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}.gcards .c b{font-size:26px}.gscroll{overflow-x:auto;margin:6px 0 10px;border:1px solid var(--bd);border-radius:10px;background:var(--card)}.gantt{min-width:760px;padding:6px 10px}.grow{display:flex;align-items:center;min-height:44px;border-bottom:1px solid var(--bd)}.grow:last-child{border-bottom:0}.glab{width:210px;flex:none;padding-right:10px;display:flex;flex-direction:column;font-size:12.5px}.gcan{position:relative;flex:1;height:34px}.ghead .gcan{height:22px}.ghead{min-height:24px}.ghead span{position:absolute;top:2px;font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em;padding-left:4px;border-left:1px solid var(--bd);box-sizing:border-box;height:20px}.gl{position:absolute;top:0;bottom:0;border-left:1px solid var(--bd);opacity:.6}.ghoje{position:absolute;top:-4px;bottom:-4px;border-left:2px solid var(--crit);z-index:2}.gbar{position:absolute;top:6px;height:22px;border-radius:6px;background:var(--ac);color:#fff;font-size:11px;display:flex;align-items:center;padding:0 6px;white-space:nowrap;overflow:hidden;box-sizing:border-box}.gbar.fut{background:var(--ac2);color:var(--tx);border:1px solid var(--ac)}.gbar.enc{background:var(--bd);color:var(--mut)}.gbar.and{box-shadow:0 0 0 2px var(--ac2)}
 .tl{border-left:2px solid var(--bd);margin:10px 0 16px 8px;padding-left:18px}.tli{position:relative;padding:8px 0}.tli .dot{position:absolute;left:-26px;top:13px;width:14px;height:14px;border-radius:50%;background:var(--card);border:2px solid var(--bd)}.tli.enc .dot{background:var(--ac);border-color:var(--ac)}.tli.and .dot{border-color:var(--ac);box-shadow:0 0 0 4px var(--ac2)}.tli.sem,.tli.fut{opacity:.8}
 .bar{height:8px;border-radius:4px;background:var(--bd);overflow:hidden;min-width:80px}.bar i{display:block;height:100%;background:var(--ac)}
 .box{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:14px;margin-bottom:12px}
@@ -62,18 +62,18 @@ dialog label{display:block;margin:8px 0 2px;font-size:12px;color:var(--mut)}dial
       logout:()=>U.signOut(au),
       async papel(uid){
         const [a,v,u]=await Promise.all([F.getDoc(uref('admins',uid)),F.getDoc(uref('validadores',uid)),F.getDoc(uref('usuarios',uid))]);
-        return {admin:a.exists(),validador:a.exists()||v.exists(),status:u.exists()?u.data().status:'',nome:u.exists()?u.data().nome:''};},
-      async decidirUsuario(u,dec,por){
+        return {admin:a.exists(),validador:a.exists()||v.exists(),status:u.exists()?u.data().status:'',nome:u.exists()?u.data().nome:'',setor:u.exists()?u.data().setor:'',papel:u.exists()?(u.data().papel||''):''};},
+      async decidirUsuario(u,dec,por,papel){
         const b=F.writeBatch(db),at=new Date().toISOString();
-        if(dec==='aprovado')b.set(uref('validadores',u.id),clean({nome:u.nome,setor:u.setor,email:u.email,por,at}));
+        if(dec==='aprovado'&&papel==='validador')b.set(uref('validadores',u.id),clean({nome:u.nome,setor:u.setor,email:u.email,por,at}));
         else b.delete(uref('validadores',u.id));
-        b.update(uref('usuarios',u.id),{status:dec,por,decididoEm:at});await b.commit();},
+        b.update(uref('usuarios',u.id),clean({status:dec,por,decididoEm:at,papel:dec==='aprovado'?(papel||'proponente'):''}));await b.commit();},
       async listCalendario(){const r=await F.getDocs(F.collection(db,'calendario'));const o={};r.docs.forEach(d=>o[d.id]=d.data().marcos||[]);return o;},
       setCalendario:(ano,marcos)=>F.setDoc(F.doc(db,'calendario',ano),clean({marcos,at:new Date().toISOString()})),
       async listDecisoes(){const r=await F.getDocs(F.collection(db,'decisoes'));return r.docs.map(d=>d.data());},
       setDecisao:(id,o)=>F.setDoc(F.doc(db,'decisoes',id),clean(o)),
       addAudit:o=>F.addDoc(F.collection(db,'auditoria'),clean(o)),
-      async enviar(lote,itens){const b=F.writeBatch(db);itens.forEach(it=>b.set(F.doc(F.collection(db,'propostas')),{...clean(it),lote,status:'pendente',criadoEm:F.serverTimestamp()}));await b.commit();},
+      async enviar(lote,itens){const b=F.writeBatch(db);itens.forEach(it=>b.set(F.doc(F.collection(db,'propostas')),{...clean(it),lote,uid:au.currentUser.uid,status:'pendente',criadoEm:F.serverTimestamp()}));await b.commit();},
       updProp:(id,patch)=>F.updateDoc(F.doc(db,'propostas',id),clean(patch)),
       watch(nome,cb,err){return F.onSnapshot(F.query(F.collection(db,nome),F.orderBy(nome==='auditoria'?'at':'criadoEm')),
         snap=>cb(snap.docs.map(d=>{const x=d.data();return {id:d.id,...x,at:iso(x.criadoEm||x.at)};})),err);}
@@ -291,10 +291,11 @@ const Store={
   fb:null,me:null,unsub:[],
   data:{ajustes:{},ov:{},destino:{},vinc:{},auditoria:[],propostas:[]},
   get canWrite(){return !!(this.me&&this.me.validador);},
+  get podeRevisar(){return !!(this.me&&(this.me.validador||this.me.status==='aprovado'));},
   sync(){const D=this.data;S.aj=D.ajustes;S.ov=D.ov;S.dest=D.destino;S.vinc=D.vinc;S.aud=D.auditoria;S.prop=D.propostas;},
   async papel(u){
     let r={admin:false,validador:false,status:'',nome:''};try{r=await this.fb.papel(u.uid);}catch(e){}
-    this.me={uid:u.uid,email:u.email,name:r.nome||u.email,validador:r.validador,admin:r.admin,status:r.status};
+    this.me={uid:u.uid,email:u.email,name:r.nome||u.email,setor:r.setor||'',papel:r.papel||'',validador:r.validador,admin:r.admin,status:r.status};
     this.unsub.forEach(f=>f&&f());this.unsub=[];this.data.auditoria=[];this.data.propostas=[];this.usuarios=[];
     if(r.validador)this.assistir();
   },
@@ -326,20 +327,21 @@ const Store={
   },
   async cadastrar(f){
     if(!f.nome||f.nome.trim().length<3||!f.setor||!f.setor.trim()){S.msg='Informe nome completo e setor.';draw();return;}
+    if(!/^[^@\s]+@[^@\s]*sp\.gov\.br$/i.test((f.email||'').trim())){S.msg='Use o e-mail institucional (terminado em sp.gov.br).';draw();return;}
     if(!f.email||!f.senha||f.senha.length<6){S.msg='Informe e-mail e uma senha de pelo menos 6 caracteres.';draw();return;}
     if(f.senha!==f.senha2){S.msg='As senhas não conferem.';draw();return;}
     try{this.cadastrando=true;S.msg='Enviando cadastro…';draw();
       const u=await this.fb.cadastrar(f.nome.trim(),f.setor.trim(),f.email.trim(),f.senha);
       this.cadastrando=false;await this.papel(u);S.fm={};
-      S.msg='Cadastro enviado! A coordenação do NGI precisa aprová-lo antes de você poder validar propostas.';}
+      S.msg='Cadastro enviado! Assim que o NGI aprovar, você poderá iniciar a revisão.';}
     catch(e){this.cadastrando=false;S.msg=this.erroAuth(e);}
     draw();window.scrollTo(0,0);
   },
   async esqueci(email){if(!email){S.msg='Digite seu e-mail no campo acima.';draw();return;}
     try{await this.fb.reset(email);S.msg='Se este e-mail tiver cadastro, enviamos um link para redefinir a senha.';}catch(e){S.msg=this.erroAuth(e);}draw();},
-  async decidir(id,dec){
+  async decidir(id,dec,papel){
     const u=(this.usuarios||[]).find(x=>x.id===id);if(!u||!this.me.admin)return;
-    try{await this.fb.decidirUsuario(u,dec,this.me.email);S.msg=dec==='aprovado'?'Cadastro de '+u.nome+' aprovado.':'Acesso de '+u.nome+' '+(dec==='recusado'?'recusado':'revogado')+'.';}
+    try{await this.fb.decidirUsuario(u,dec,this.me.email,papel);S.msg=dec==='aprovado'?'Cadastro de '+u.nome+' aprovado como '+(papel==='validador'?'validador(a)':'proponente')+'.':'Acesso de '+u.nome+' '+(dec==='recusado'?'recusado':'revogado')+'.';}
     catch(e){S.msg='Não foi possível salvar ('+(e.code||e.message)+').';}draw();},
   async logout(){try{await this.fb.logout();S.msg='Você saiu.';}catch(e){}},
   async load(){
@@ -381,10 +383,11 @@ function justificar(titulo,antes,depois,rot){
   });
 }
 const rid=()=>Math.random().toString(36).slice(2,8)+Date.now().toString(36).slice(-4);
+function exigeLogin(){S.tab='cfg';S.msg=Store.me?'Seu cadastro ainda não foi aprovado pelo NGI. Assim que for, você poderá revisar.':'Para revisar e enviar alterações é preciso entrar com seu e-mail e senha.';window.scrollTo(0,0);draw();}
 async function registrar(acao,cid,rotulo,antes,depois,ap){
   const c=allCs().find(x=>x.id==cid)||{};
   const base={acao,cid,ref:rotulo,ano:c.ano||'',titulo:c.titulo||'',area:c.area||'',antes:antes||'',depois:depois||'',ap};
-  if(!Store.canWrite)return proporAlteracao(base);
+  if(!Store.canWrite){if(!Store.podeRevisar){exigeLogin();return false;}return proporAlteracao(base);}
   const j=await justificar(acao+' · '+rotulo,antes,depois);
   if(j===null){draw();return false;}
   const ok=await Store.gravar(ap,{acao,cid,ref:rotulo,antes:antes||'',depois:depois||'',just:j});
@@ -393,8 +396,8 @@ async function registrar(acao,cid,rotulo,antes,depois,ap){
 /* ===== Quem não é validador PROPÕE: identifica-se uma vez, acumula as propostas na cesta e envia todas de uma vez ===== */
 const Cesta={get(){try{return JSON.parse(LS.get('cesta')||'[]')}catch(e){return[]}},set(a){LS.set('cesta',JSON.stringify(a))}};
 const Envios={get(){try{return JSON.parse(LS.get('enviadas')||'[]')}catch(e){return[]}},add(x){LS.set('enviadas',JSON.stringify([x].concat(this.get()).slice(0,30)))}};
-const ident=()=>({nome:LS.get('prop_nome'),setor:LS.get('prop_setor'),email:LS.get('prop_email')});
-const identOk=i=>i.nome&&i.nome.length>=3&&i.setor&&/^[^@\s]+@[^@\s]*sp\.gov\.br$/i.test(i.email);
+const ident=()=>Store.me?{nome:Store.me.name,setor:Store.me.setor||'',email:Store.me.email}:{nome:'',setor:'',email:''};
+const identOk=i=>Store.podeRevisar&&i.nome&&i.nome.length>=3&&i.setor&&/^[^@\s]+@[^@\s]*sp\.gov\.br$/i.test(i.email);
 function proporAlteracao(base){
   return new Promise(res=>{
     const d=$('#dj');const i=ident();const ok=identOk(i);
@@ -426,8 +429,7 @@ function xMinhas(lote){
 }
 function minhas(){
   const C=Cesta.get(),i=ident(),E=Envios.get();
-  return `<div class="box"><b>Quem está propondo</b><p class="sub">Você se identifica uma única vez; os dados ficam salvos neste navegador.</p>
-  <div class="row"><input id="mi_n" placeholder="Nome" value="${esc(i.nome)}"><input id="mi_s" placeholder="Setor" value="${esc(i.setor)}"><input id="mi_e" placeholder="E-mail institucional" value="${esc(i.email)}" style="min-width:240px"></div></div>
+  return `<div class="box"><b>Quem está propondo</b> ${Store.me?`<p class="sub">${esc(i.nome)} · ${esc(i.setor)} · ${esc(i.email)} (dados da sua conta)</p>`:`<p class="sub">Entre com seu e-mail e senha para enviar. <button class="s" data-t="cfg">Entrar</button></p>`}</div>
   <div class="tw"><table><thead><tr><th>Item</th><th>O que muda</th><th>Justificativa</th><th></th></tr></thead><tbody>${C.map(p=>`<tr><td><b>${esc(p.ref)}</b><br><span class="sub">${esc(p.titulo)}</span></td><td><span class="sub">${esc(p.acao)}</span><br>De: ${esc(p.antes||'—')}<br><b>Para: ${esc(p.depois||'—')}</b></td><td><textarea data-mj="${p.id}" rows="2" class="${(p.just||'').length>=JUST_MIN?'':'falta'}" placeholder="Justificativa (obrigatória, mínimo ${JUST_MIN} caracteres)" style="width:100%;min-width:200px">${esc(p.just||'')}</textarea></td><td><button class="s" data-rm="${p.id}">Remover</button></td></tr>`).join('')||'<tr><td colspan="4" class="sub">Nenhuma proposta na cesta. Faça revisões na aba Itens do PCA: elas ficam aqui até você enviar.</td></tr>'}</tbody></table></div>
   <div class="row" style="margin-top:12px"><button class="p" id="mi_env" ${C.length?'':'disabled'}>Enviar todas à coordenação (${C.length})</button><button class="s" id="mi_x">Baixar tabela das minhas alterações</button></div>
   ${E.length?`<h3>Já enviadas</h3><div class="tw"><table><thead><tr><th>Protocolo</th><th>Data</th><th>Propostas</th><th></th></tr></thead><tbody>${E.map(e=>`<tr><td><b>${esc(e.lote)}</b></td><td>${fmtDT(e.at)}</td><td>${e.n}</td><td>${e.itens?`<button class="s" data-mx="${esc(e.lote)}">Baixar</button>`:''}</td></tr>`).join('')}</tbody></table></div>`:''}`;
@@ -435,7 +437,7 @@ function minhas(){
 async function enviarCesta(){
   const C=Cesta.get(),i=ident();
   if(!C.length)return;
-  if(!identOk(i)){S.msg='Preencha nome, setor e e-mail institucional (sp.gov.br) antes de enviar.';draw();return;}
+  if(!identOk(i)){exigeLogin();return;}
   const sj=C.filter(x=>(x.just||'').length<JUST_MIN);
   if(sj.length){S.msg=sj.length+' proposta(s) sem justificativa (mínimo '+JUST_MIN+' caracteres). Preencha na coluna Justificativa antes de enviar.';draw();return;}
   if(!Store.fb){S.msg='Sem conexão com o servidor: suas propostas continuam guardadas aqui. Tente novamente em instantes.';draw();return;}
@@ -512,6 +514,7 @@ function toast(m){let t=$('#toast');if(!t){t=document.createElement('div');t.id=
 function destSel(c){const r=rascunho(c),v=r?r.ap.v:destOf(c);return `<select data-dest="${esc(c.id)}"${r?' class="rasc"':''}>${Object.keys(DEST).map(k=>`<option value="${k}" ${v==k?'selected':''}>${dLabel(k,c.ano)}</option>`).join('')}</select>${r?`<input data-rj="${esc(c.id)}" class="${(r.just||'').length>=JUST_MIN?'':'falta'}" placeholder="Justificativa (obrigatória)" value="${esc(r.just||'')}"><div class="row" style="margin:4px 0 0">${(r.just||'').length>=JUST_MIN?'<span class="st-ok">✓ Revisão guardada</span> <span class="sub">(falta enviar à coordenação)</span>':'<span class="st-pen">Falta a justificativa</span>'}<button class="s" data-rg="${esc(c.id)}">Gravar revisão</button></div>`:''}`}
 async function setDest(c,d){
   if(Store.canWrite){const ok=await registrar('Revisão do item',c.id,c.num,dLabel(destOf(c),c.ano)||'A definir',dLabel(d,c.ano),{t:'dest',cid:c.id,v:d});if(ok)toast('Revisão do DFD '+c.num+' gravada.');return ok;}
+  if(!Store.podeRevisar){exigeLogin();return;}
   /* quem propõe: revisa vários itens, sem janela; a justificativa é preenchida na própria linha e tudo é enviado depois */
   const ch='dest|'+c.id,C=Cesta.get(),ant=C.find(x=>x.ch===ch);
   let N=C.filter(x=>x.ch!==ch);
@@ -520,7 +523,8 @@ async function setDest(c,d){
   if(d!==destOf(c))toast('DFD '+c.num+': escolha guardada. Escreva a justificativa e clique em Gravar revisão.');
 }
 function fmtDT(s){if(!s)return '—';const d=new Date(s);return isNaN(d)?s:d.toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'});}
-const GV=[['a26','Contratação (PCA × contratado)'],['sempca','Contratos sem PCA'],['pend','Pendências'],['painel','Resumo por regra e área'],['cruz','Cruzamento 2026×2027'],['pncp','Situação no PNCP']];
+const GV=[['a26','Todas as linhas de 2026'],['contratadas','Contratadas'],['semcontr','Sem contratação'],['sempca','Contratos sem PCA'],['pend','Pendências'],['painel','Por regra e área'],['cruz','Cruzamento 2026×2027'],['pncp','Situação no PNCP']];
+const gfOf=k=>({a26:{},contratadas:{sit:SIT26[0]},semcontr:{sit:SIT26[2]},sempca:{sit:SIT26[3]}})[k];
 /* Calendário do Decreto estadual 67.689/2023: o PCA do exercício N é elaborado no ano N-1 */
 const marcosDecreto=ano=>{const E=ano-1,d=(m,x)=>E+'-'+m+'-'+x,D='Decreto 67.689/2023, ';return [
  {nome:'Preenchimento dos DFDs no PGC pelas áreas',resp:'Áreas requisitantes',ini:'',fim:d('05','15'),desc:D+'art. 9º: até a primeira quinzena de maio.'},
@@ -586,9 +590,13 @@ function calend(){
 }
 function itens(){return contr();}
 function ger(){
-  const vis=S.vis,areas=[...new Set(allCsAll().map(c=>c.area).filter(Boolean))].sort();
-  return `<p class="sub">Painel para acompanhamento: contratação, pendências e contratos sem PCA. A revisão dos itens é feita na tela <b>Revisão</b>.</p><div class="row"><label class="sub">Visão</label><select id="vis">${GV.map(o=>`<option value="${o[0]}" ${vis===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select>
-  ${['pend','painel'].includes(vis)?`<label class="sub">Área</label><select id="farea"><option value="">Todas as áreas</option>${areas.map(a=>`<option ${S.farea===a?'selected':''}>${esc(a)}</option>`).join('')}</select>`:''}</div>`+({a26,sempca:a26,pend,painel,cruz,pncp}[vis])();
+  const vis=S.vis,areas=[...new Set(allCsAll().map(c=>c.area).filter(Boolean))].sort(),R=linhas26();
+  const n=sit=>R?R.filter(r=>r.sit===sit).length:'—';
+  const pend_=allVals().filter(a=>stOf(a)==='pendente').length;
+  const N={a26:R?R.length:'—',contratadas:n(SIT26[0]),semcontr:n(SIT26[2]),sempca:n(SIT26[3]),pend:pend_,painel:'Resumo',cruz:'2026×2027',pncp:S.pn?S.pn.rows.filter(p=>S.ano==='todos'||String(p.ano)===String(S.ano)).length:'—'};
+  const T={a26:'linhas, PCA 2026 × PNCP',contratadas:'itens contratados (homologados)',semcontr:'sem contratação localizada',sempca:'contratos sem item no PCA',pend:'pendências em aberto',painel:'por regra e por área',cruz:'itens que migram para 2027',pncp:'publicações no PNCP no ano do PCA'};
+  const cards=`<div class="cards big gcards">${GV.map(o=>`<button class="c gv ${vis===o[0]?'on':''}" data-gv="${o[0]}" aria-pressed="${vis===o[0]}"><b>${N[o[0]]}</b><span>${o[1]}<br>${T[o[0]]}</span></button>`).join('')}</div>`;
+  return `<p class="sub">Clique em um quadro para ver os detalhes logo abaixo.</p>`+cards+(['pend','painel'].includes(vis)?`<div class="row"><label class="sub">Área</label><select id="farea"><option value="">Todas as áreas</option>${areas.map(a=>`<option ${S.farea===a?'selected':''}>${esc(a)}</option>`).join('')}</select></div>`:'')+({a26,contratadas:a26,semcontr:a26,sempca:a26,pend,painel,cruz,pncp}[vis])();
 }
 function coord(){
   const sub=S.csub||'prop',pp=(S.prop||[]).filter(p=>p.status==='pendente').length,cp=(Store.usuarios||[]).filter(u=>u.status==='pendente').length;
@@ -647,6 +655,7 @@ function pend(){
   return h+`</table></div>${v.length>300?'<p class="sub">Mostrando 300; refine os filtros.</p>':''}`;
 }
 function contr(){
+  if(!Store.podeRevisar)return `<div class="box agora"><h2>Entre para iniciar a revisão</h2><p>${!Store.fb?'Sem conexão com o servidor. Tente recarregar.':Store.me?'Seu cadastro ainda <b>aguarda a aprovação do NGI</b>. Assim que for aprovado, a revisão será liberada para você.':'A revisão é feita por quem tem conta aprovada pelo NGI. Entre com seu e-mail institucional e senha, ou peça seu cadastro.'}</p>${Store.me?'':'<button class="p" data-t="cfg">Entrar ou pedir cadastro</button>'}</div>`;
   const q=(S.q||'').toLowerCase();
   const ano=S.ano==='todos'?2026:S.ano;
   const cs=aRevisar(allCs(),ano).filter(c=>(!q||(c.num+c.titulo+c.area).toLowerCase().includes(q))&&(!S.fdest||(S.fdest=='_'?destOf(c)=='':destOf(c)==S.fdest)));
@@ -766,24 +775,24 @@ function hist(){
 }
 function cfg(){
   const m=Store.me,f=S.fm=S.fm||{},modo=S.cfgModo||'entrar';
-  const est=!Store.fb?'<span class="tag crit">Sem conexão com o servidor</span>':!m?'<span class="tag" style="color:var(--mut)">Consulta e propostas</span>':m.admin?`<span class="tag ok">Coordenação (administradora) · ${esc(m.email)}</span>`:m.validador?`<span class="tag ok">Validação liberada · ${esc(m.email)}</span>`:m.status==='pendente'?`<span class="tag med">Cadastro aguardando aprovação · ${esc(m.email)}</span>`:`<span class="tag med">${esc(m.email)} sem acesso de validação</span>`;
+  const est=!Store.fb?'<span class="tag crit">Sem conexão com o servidor</span>':!m?'<span class="tag" style="color:var(--mut)">Somente consulta</span>':m.admin?`<span class="tag ok">Coordenação (administradora) · ${esc(m.email)}</span>`:m.validador?`<span class="tag ok">Validação liberada · ${esc(m.email)}</span>`:m.status==='aprovado'?`<span class="tag ok">Proponente · ${esc(m.email)}</span>`:m.status==='pendente'?`<span class="tag med">Cadastro aguardando aprovação · ${esc(m.email)}</span>`:`<span class="tag med">${esc(m.email)} sem acesso de validação</span>`;
   const inp=(id,ph,t,v)=>`<input id="${id}" data-fm="${id}" type="${t||'text'}" placeholder="${ph}" value="${esc(v||'')}" style="min-width:230px">`;
   let corpo='';
   if(!Store.fb)corpo='';
-  else if(m)corpo=`<p class="sub">${m.validador?'Você pode aprovar propostas e registrar decisões diretamente.':m.status==='pendente'?'Seu cadastro foi enviado e aguarda a aprovação do NGI.':'Este acesso não está liberado. Fale com o NGI.'}</p><div class="row" style="margin-top:12px"><button class="s" id="c_out">Sair</button></div>`;
+  else if(m)corpo=`<p class="sub">${m.validador?'Você pode aprovar propostas e registrar decisões diretamente.':m.status==='aprovado'?'Você pode revisar os itens e enviar propostas à coordenação.':m.status==='pendente'?'Seu cadastro foi enviado e aguarda a aprovação do NGI.':'Este acesso não está liberado. Fale com o NGI.'}</p><div class="row" style="margin-top:12px"><button class="s" id="c_out">Sair</button></div>`;
   else corpo=`<div class="row" style="margin:10px 0"><button class="${modo==='entrar'?'p':'s'}" data-modo="entrar">Entrar</button><button class="${modo==='cadastro'?'p':'s'}" data-modo="cadastro">Pedir cadastro</button></div>
     <div class="row">${modo==='cadastro'?inp('fm_nome','Nome completo','text',f.fm_nome)+inp('fm_setor','Setor','text',f.fm_setor):''}${inp('fm_email','E-mail','email',f.fm_email)}${inp('fm_senha','Senha','password',f.fm_senha)}${modo==='cadastro'?inp('fm_senha2','Repita a senha','password',f.fm_senha2):''}</div>
     <div class="row" style="margin-top:12px">${modo==='entrar'?'<button class="p" id="c_in">Entrar</button><button class="s" id="c_esq">Esqueci a senha</button>':'<button class="p" id="c_cad">Enviar pedido de cadastro</button>'}</div>
     ${modo==='cadastro'?'<p class="sub">O acesso só é liberado depois que o NGI aprovar o seu cadastro.</p>':''}`;
-  return `<div class="box"><b>Acesso da coordenação</b> ${est}
-  <p class="sub"><b>Qualquer servidor</b> pode consultar o painel e <b>propor alterações</b>, sem conta: informa nome, setor e e-mail uma única vez, acumula as propostas em <b>Minhas propostas</b> e envia todas de uma vez. Elas só valem depois de <b>aprovadas pela coordenação</b>.</p>
-  <p class="sub">Quem vai aprovar propostas pede cadastro com e-mail e senha; o NGI aprova cada pedido. Toda alteração exige justificativa e fica no Histórico, com o nome de quem propôs e de quem validou.</p>${corpo}</div>`;
+  return `<div class="box"><b>Acesso</b> ${est}
+  <p class="sub">Qualquer pessoa pode <b>consultar</b> o painel. Para <b>iniciar a revisão</b> e enviar propostas é preciso <b>entrar</b> com e-mail institucional e senha (cadastro aprovado pelo NGI). Seus dados vêm da conta e as propostas só valem depois de <b>aprovadas pela coordenação</b>.</p>
+  <p class="sub">Quem ainda não tem conta pede cadastro; o NGI aprova cada pedido. Toda alteração exige justificativa e fica no Histórico, com o nome de quem propôs e de quem validou.</p>${corpo}</div>`;
 }
 function cad(){
   const U=(Store.usuarios||[]).slice().reverse();
   const tg=s=>s==='pendente'?'<span class="tag med">Pendente</span>':s==='aprovado'?'<span class="tag ok">Aprovado</span>':'<span class="tag crit">'+(s==='revogado'?'Revogado':'Recusado')+'</span>';
-  return `<p class="sub">Pedidos de cadastro de quem quer validar propostas. Só quem você aprovar aqui consegue ler as propostas e gravar decisões.</p>
-  <div class="tw"><table><thead><tr><th>Pedido em</th><th>Nome</th><th>Setor</th><th>E-mail</th><th>Situação</th><th>Ação</th></tr></thead><tbody>${U.map(u=>`<tr><td>${fmtDT(u.at)}</td><td><b>${esc(u.nome)}</b></td><td>${esc(u.setor)}</td><td>${esc(u.email)}</td><td>${tg(u.status)}${u.por?'<br><span class="sub">por '+esc(u.por)+'</span>':''}</td><td>${u.id===(Store.me||{}).uid?'<span class="sub">você</span>':u.status==='pendente'?`<button class="p" data-ud="${u.id}|aprovado">Aprovar</button> <button class="s" data-ud="${u.id}|recusado">Recusar</button>`:u.status==='aprovado'?`<button class="s" data-ud="${u.id}|revogado">Revogar acesso</button>`:`<button class="s" data-ud="${u.id}|aprovado">Aprovar</button>`}</td></tr>`).join('')||'<tr><td colspan="6" class="sub">Nenhum pedido de cadastro ainda.</td></tr>'}</tbody></table></div>`;
+  return `<p class="sub">Pedidos de cadastro. <b>Proponente</b> (as áreas): faz a revisão e envia propostas. <b>Validador</b>: além disso, lê as propostas e grava decisões. Só quem você aprovar aqui entra.</p>
+  <div class="tw"><table><thead><tr><th>Pedido em</th><th>Nome</th><th>Setor</th><th>E-mail</th><th>Situação</th><th>Ação</th></tr></thead><tbody>${U.map(u=>`<tr><td>${fmtDT(u.at)}</td><td><b>${esc(u.nome)}</b></td><td>${esc(u.setor)}</td><td>${esc(u.email)}</td><td>${tg(u.status)}${u.por?'<br><span class="sub">por '+esc(u.por)+'</span>':''}</td><td>${u.id===(Store.me||{}).uid?'<span class="sub">você</span>':u.status==='pendente'?`<button class="p" data-ud="${u.id}|aprovado|proponente">Aprovar como proponente</button> <button class="s" data-ud="${u.id}|aprovado|validador">Aprovar como validador</button> <button class="s" data-ud="${u.id}|recusado">Recusar</button>`:u.status==='aprovado'?`<span class="sub">${u.papel==='validador'?'Validador':'Proponente'}</span> <button class="s" data-ud="${u.id}|revogado">Revogar acesso</button>`:`<button class="s" data-ud="${u.id}|aprovado|proponente">Aprovar como proponente</button>`}</td></tr>`).join('')||'<tr><td colspan="6" class="sub">Nenhum pedido de cadastro ainda.</td></tr>'}</tbody></table></div>`;
 }
 function dados(){
   const d=cur(),nx=S.ds[S.ano+1];
@@ -800,7 +809,7 @@ function bind(){
   document.querySelectorAll('[data-pv]').forEach(b=>b.onclick=()=>{const [i,d]=b.dataset.pv.split('|');validar(i,d);});
   const px=$('#px');if(px)px.onclick=()=>{const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';const c=['Protocolo','Recebida em','PCA','DFD','Título','Área','Proponente','Setor','E-mail','Ação','De','Para','Justificativa do proponente','Situação','Validado por','Data da validação','Comentário da validação'];save('propostas_pca.csv','\ufeff'+[c.join(';')].concat((S.prop||[]).map(p=>[p.lote,p.at,p.ano,p.ref,p.titulo,p.area,p.prop.nome,p.prop.setor,p.prop.email,p.acao,p.antes,p.depois,p.just,p.status,(p.val||{}).uid,(p.val||{}).at,(p.val||{}).coment].map(q).join(';'))).join('\n'));};
   document.querySelectorAll('[data-fm]').forEach(e=>e.oninput=()=>{(S.fm=S.fm||{})[e.dataset.fm]=e.value;});
-  const vs=$('#vis');if(vs)vs.onchange=()=>{S.vis=vs.value;if(vs.value==='sempca')S.f26={...F26.sempca};else if(vs.value==='a26')S.f26={};draw();};const fa=$('#farea');if(fa)fa.onchange=()=>{S.farea=fa.value;draw();};
+  document.querySelectorAll('[data-gv]').forEach(b=>b.onclick=()=>{S.vis=b.dataset.gv;const f=gfOf(S.vis);if(f)S.f26={...f};draw();});const fa=$('#farea');if(fa)fa.onchange=()=>{S.farea=fa.value;draw();};
   document.querySelectorAll('[data-cs]').forEach(b=>b.onclick=()=>{S.csub=b.dataset.cs;draw();});
   document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{S.farea=b.dataset.go;S.tab='itens';window.scrollTo(0,0);draw();});
   const mx=$('#mi_x');if(mx)mx.onclick=()=>xMinhas();document.querySelectorAll('[data-mx]').forEach(b=>b.onclick=()=>xMinhas(b.dataset.mx));
@@ -809,9 +818,8 @@ function bind(){
   const ci=$('#c_in');if(ci)ci.onclick=()=>Store.login((F_().fm_email||'').trim(),F_().fm_senha||'');
   const cc_=$('#c_cad');if(cc_)cc_.onclick=()=>Store.cadastrar({nome:F_().fm_nome,setor:F_().fm_setor,email:F_().fm_email,senha:F_().fm_senha,senha2:F_().fm_senha2});
   const ce_=$('#c_esq');if(ce_)ce_.onclick=()=>Store.esqueci((F_().fm_email||'').trim());
-  document.querySelectorAll('[data-ud]').forEach(b=>b.onclick=()=>{const [i,d]=b.dataset.ud.split('|');Store.decidir(i,d);});
+  document.querySelectorAll('[data-ud]').forEach(b=>b.onclick=()=>{const [i,d,pp]=b.dataset.ud.split('|');Store.decidir(i,d,pp);});
   const co=$('#c_out');if(co)co.onclick=()=>Store.logout();
-  [['mi_n','prop_nome'],['mi_s','prop_setor'],['mi_e','prop_email']].forEach(([id,k])=>{const e=$('#'+id);if(e)e.onchange=()=>LS.set(k,e.value.trim());});
   const salvaJ=(id,v)=>{Cesta.set(Cesta.get().map(x=>x.id===id?{...x,just:v.trim()}:x));};
   document.querySelectorAll('[data-mj]').forEach(e=>e.onchange=()=>{salvaJ(e.dataset.mj,e.value);draw();});
   document.querySelectorAll('[data-rj]').forEach(e=>e.onchange=()=>{const it=Cesta.get().find(x=>x.ch==='dest|'+e.dataset.rj);if(it){salvaJ(it.id,e.value);e.classList.toggle('falta',e.value.trim().length<JUST_MIN);}});
@@ -820,10 +828,11 @@ function bind(){
     if(!it||(it.just||'').length<JUST_MIN){toast('Escreva a justificativa (mínimo '+JUST_MIN+' caracteres) para gravar.');if(inp)inp.focus();return;}
     draw();toast('Revisão do DFD '+it.ref+' gravada. Quando terminar, clique em Enviar revisão à coordenação.');});
   const re=$('#rv_env');if(re)re.onclick=()=>{const C=Cesta.get();if(!C.length)return;const sj=C.filter(x=>(x.just||'').length<JUST_MIN).length;
-    if(sj||!identOk(ident())){S.tab='minhas';S.msg=sj?sj+' revisão(ões) sem justificativa: complete antes de enviar.':'Identifique-se uma vez para enviar.';window.scrollTo(0,0);draw();}
+    if(!identOk(ident())){exigeLogin();}
+    else if(sj){S.tab='minhas';S.msg=sj+' revisão(ões) sem justificativa: complete antes de enviar.';window.scrollTo(0,0);draw();}
     else{window.scrollTo(0,0);enviarCesta();}};
   document.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{Cesta.set(Cesta.get().filter(x=>x.id!==b.dataset.rm));draw();});
-  const me_=$('#mi_env');if(me_)me_.onclick=()=>{[['mi_n','prop_nome'],['mi_s','prop_setor'],['mi_e','prop_email']].forEach(([id,k])=>LS.set(k,$('#'+id).value.trim()));enviarCesta();};
+  const me_=$('#mi_env');if(me_)me_.onclick=()=>{enviarCesta();};
   ['fsev','freg','fst','pst','fdest'].forEach(k=>{const e=$('#'+k);if(e)e.onchange=()=>{S[k]=e.value;draw();};});
   const q=$('#q');if(q)q.oninput=()=>{S.q=q.value;clearTimeout(window._t);window._t=setTimeout(()=>{draw();const n=$('#q');n.focus();n.setSelectionRange(99,99);},250);};
   document.querySelectorAll('[data-up]').forEach(i=>i.onchange=()=>i.files[0]&&onFile(i.files[0],+i.dataset.up));
