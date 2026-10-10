@@ -35,9 +35,18 @@ service cloud.firestore {
         && request.resource.data.setor is string && request.resource.data.setor.size() >= 1 && request.resource.data.setor.size() <= 120
         && request.resource.data.email is string && request.resource.data.email.size() <= 200
         && request.resource.data.email.matches('^[^@ ]+@[^@ ]*sp\\.gov\\.br$');
-      allow update: if admin()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','por','decididoEm','papel'])
-        && request.resource.data.status in ['aprovado','recusado','revogado'];
+      allow update: if (admin()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','por','decididoEm','papel'])
+          && request.resource.data.status in ['aprovado','recusado','revogado'])
+        // aprovação automática: e-mail @fflorestal.sp.gov.br com endereço confirmado, só a própria pessoa, só de "pendente" para "proponente"
+        || (request.auth != null && request.auth.uid == uid
+          && request.auth.token.email_verified == true
+          && request.auth.token.email.lower().matches('^[^@ ]+@fflorestal\\.sp\\.gov\\.br$')
+          && resource.data.status == 'pendente'
+          && resource.data.email.lower() == request.auth.token.email.lower()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','por','decididoEm','papel'])
+          && request.resource.data.status == 'aprovado'
+          && request.resource.data.papel == 'proponente');
       allow delete: if false;
     }
 

@@ -57,12 +57,17 @@ dialog label{display:block;margin:8px 0 2px;font-size:12px;color:var(--mut)}dial
       login:(e,s)=>U.signInWithEmailAndPassword(au,e,s),
       async cadastrar(nome,setor,email,senha){
         const c=await U.createUserWithEmailAndPassword(au,email,senha);
-        await F.setDoc(uref('usuarios',c.user.uid),{nome,setor,email,status:'pendente',criadoEm:F.serverTimestamp()});return c.user;},
+        await F.setDoc(uref('usuarios',c.user.uid),{nome,setor,email,status:'pendente',criadoEm:F.serverTimestamp()});
+        try{await U.sendEmailVerification(c.user);}catch(e){}
+        return c.user;},
+      reenviarVerif:()=>U.sendEmailVerification(au.currentUser),
+      async recarregar(){await au.currentUser.reload();await au.currentUser.getIdToken(true);},
+      autoAprovar:uid=>F.updateDoc(uref('usuarios',uid),clean({status:'aprovado',papel:'proponente',por:'automático (e-mail @fflorestal.sp.gov.br confirmado)',decididoEm:new Date().toISOString()})),
       reset:e=>U.sendPasswordResetEmail(au,e),
       logout:()=>U.signOut(au),
       async papel(uid){
         const [a,v,u]=await Promise.all([F.getDoc(uref('admins',uid)),F.getDoc(uref('validadores',uid)),F.getDoc(uref('usuarios',uid))]);
-        return {admin:a.exists(),validador:a.exists()||v.exists(),status:u.exists()?u.data().status:'',nome:u.exists()?u.data().nome:'',setor:u.exists()?u.data().setor:'',papel:u.exists()?(u.data().papel||''):''};},
+        return {verificado:!!(au.currentUser&&au.currentUser.emailVerified),admin:a.exists(),validador:a.exists()||v.exists(),status:u.exists()?u.data().status:'',nome:u.exists()?u.data().nome:'',setor:u.exists()?u.data().setor:'',papel:u.exists()?(u.data().papel||''):''};},
       async decidirUsuario(u,dec,por,papel){
         const b=F.writeBatch(db),at=new Date().toISOString();
         if(dec==='aprovado'&&papel==='validador')b.set(uref('validadores',u.id),clean({nome:u.nome,setor:u.setor,email:u.email,por,at}));
@@ -297,8 +302,12 @@ const Store={
   get podeRevisar(){return !!(this.me&&(this.me.validador||this.me.status==='aprovado'));},
   sync(){const D=this.data;S.aj=D.ajustes;S.ov=D.ov;S.dest=D.destino;S.vinc=D.vinc;S.aud=D.auditoria;S.prop=D.propostas;},
   async papel(u){
+    this.u=u;
     let r={admin:false,validador:false,status:'',nome:''};try{r=await this.fb.papel(u.uid);}catch(e){}
-    this.me={uid:u.uid,email:u.email,name:r.nome||u.email,setor:r.setor||'',papel:r.papel||'',validador:r.validador,admin:r.admin,status:r.status};
+    const dom=/@fflorestal\.sp\.gov\.br$/i.test(u.email||'');
+    /* e-mail @fflorestal.sp.gov.br com endereço confirmado: aprovação automática como proponente */
+    if(r.status==='pendente'&&dom&&r.verificado&&!r.validador){try{await this.fb.autoAprovar(u.uid);r=await this.fb.papel(u.uid);}catch(e){}}
+    this.me={dom,verificado:r.verificado,uid:u.uid,email:u.email,name:r.nome||u.email,setor:r.setor||'',papel:r.papel||'',validador:r.validador,admin:r.admin,status:r.status};
     this.unsub.forEach(f=>f&&f());this.unsub=[];this.data.auditoria=[];this.data.propostas=[];this.usuarios=[];
     S.minhas=[];
     if(r.validador)this.assistir();else if(r.status==='aprovado'){this.assistirMinhas(u.uid);this.carregarRascunho(u.uid);}
@@ -338,6 +347,8 @@ const Store={
     if(!email||!senha){S.msg='Informe e-mail e senha.';draw();return;}
     try{S.msg='Entrando…';draw();await this.fb.login(email,senha);S.msg='';}catch(e){S.msg=this.erroAuth(e);}draw();window.scrollTo(0,0);
   },
+  async recheck(){try{await this.fb.recarregar();await this.papel(this.u);S.msg=this.me.status==='aprovado'?'E-mail confirmado! Seu acesso foi liberado.':'Ainda não identificamos a confirmação. Clique no link do e-mail e tente de novo.';}catch(e){S.msg='Não foi possível verificar agora. Saia, entre de novo e tente.';}draw();},
+  async reenviar(){try{await this.fb.reenviarVerif();S.msg='E-mail de confirmação reenviado para '+this.me.email+'. Confira também a caixa de spam.';}catch(e){S.msg='Não foi possível reenviar agora ('+(e.code||e.message)+'). Aguarde alguns minutos.';}draw();},
   async cadastrar(f){
     if(!f.nome||f.nome.trim().length<3||!f.setor||!f.setor.trim()){S.msg='Informe nome completo e setor.';draw();return;}
     if(!/^[^@\s]+@[^@\s]*sp\.gov\.br$/i.test((f.email||'').trim())){S.msg='Use o e-mail institucional (terminado em sp.gov.br).';draw();return;}
@@ -346,7 +357,7 @@ const Store={
     try{this.cadastrando=true;S.msg='Enviando cadastro…';draw();
       const u=await this.fb.cadastrar(f.nome.trim(),f.setor.trim(),f.email.trim(),f.senha);
       this.cadastrando=false;await this.papel(u);S.fm={};
-      S.msg='Cadastro enviado! Assim que o NGI aprovar, você poderá iniciar a revisão.';}
+      S.msg=this.me&&this.me.dom?'Cadastro criado! Enviamos um e-mail de confirmação para '+this.me.email+'. Clique no link (veja também o spam) e volte aqui: seu acesso é liberado automaticamente.':'Cadastro enviado! Assim que o NGI aprovar, você poderá iniciar a revisão.';}
     catch(e){this.cadastrando=false;S.msg=this.erroAuth(e);}
     draw();window.scrollTo(0,0);
   },
@@ -684,7 +695,7 @@ function pend(){
   return h+`</table></div>${v.length>300?'<p class="sub">Mostrando 300; refine os filtros.</p>':''}`;
 }
 function contr(){
-  if(!Store.podeRevisar)return `<div class="box agora"><h2>Entre para iniciar a revisão</h2><p>${!Store.fb?'Sem conexão com o servidor. Tente recarregar.':Store.me?'Seu cadastro ainda <b>aguarda a aprovação do NGI</b>. Assim que for aprovado, a revisão será liberada para você.':'A revisão é feita por quem tem conta aprovada pelo NGI. Entre com seu e-mail institucional e senha, ou peça seu cadastro.'}</p>${Store.me?'':'<button class="p" data-t="cfg">Entrar ou pedir cadastro</button>'}</div>`;
+  if(!Store.podeRevisar)return `<div class="box agora"><h2>Entre para iniciar a revisão</h2><p>${!Store.fb?'Sem conexão com o servidor. Tente recarregar.':Store.me?(Store.me.dom&&!Store.me.verificado?'Falta <b>confirmar seu e-mail</b>. Abra a tela de acesso (seu nome, no canto superior), siga as instruções e o acesso é liberado automaticamente.':'Seu cadastro ainda <b>aguarda a aprovação do NGI</b>. Assim que for aprovado, a revisão será liberada para você.'):'A revisão é feita por quem tem conta aprovada pelo NGI. Entre com seu e-mail institucional e senha, ou peça seu cadastro.'}</p>${Store.me?'':'<button class="p" data-t="cfg">Entrar ou pedir cadastro</button>'}</div>`;
   const q=(S.q||'').toLowerCase();
   const ano=S.ano==='todos'?2026:S.ano;
   const cs=aRevisar(allCs(),ano).filter(c=>(!q||(c.num+c.titulo+c.area).toLowerCase().includes(q))&&((Store.canWrite&&S.verRev)||destOf(c)==='')&&(Store.canWrite||(!emAnalise(c.id)&&!aprovadaMinha(c.id))));
@@ -812,16 +823,18 @@ function cfg(){
   if(m){
     const papel=m.admin?'Administradora':m.validador?'Validador(a)':m.status==='aprovado'?'Proponente':m.status==='pendente'?'Cadastro aguardando aprovação':'Sem acesso liberado';
     const cl=m.validador||m.status==='aprovado'?'ok':'med';
-    const txt=m.validador?'Você pode revisar, aprovar propostas e registrar decisões diretamente.':m.status==='aprovado'?'Você pode revisar os itens do PCA e enviar suas propostas à coordenação.':m.status==='pendente'?'Seu cadastro foi enviado. Assim que o NGI aprovar, a revisão será liberada para você.':'Este acesso não está liberado. Fale com o NGI.';
+    const aguarda=m.status==='pendente'&&m.dom&&!m.verificado;
+    const txt=aguarda?`Falta confirmar seu e-mail. Enviamos um link para <b>${esc(m.email)}</b>. Clique nele (veja também o spam) e depois toque em “Já confirmei”: o acesso é liberado automaticamente.`:m.validador?'Você pode revisar, aprovar propostas e registrar decisões diretamente.':m.status==='aprovado'?'Você pode revisar os itens do PCA e enviar suas propostas à coordenação.':m.status==='pendente'?'Seu cadastro foi enviado. Assim que o NGI aprovar, a revisão será liberada para você.':'Este acesso não está liberado. Fale com o NGI.';
     return `<div class="acesso"><div class="box">${aviso}<div class="perfil"><div class="avatar" aria-hidden="true">${esc((m.name||m.email||'?').trim().charAt(0).toUpperCase())}</div><div><b>${esc(m.name||m.email)}</b><br><span class="sub">${esc(m.setor||'')}${m.setor?' · ':''}${esc(m.email)}</span><br><span class="tag ${cl}">${papel}</span></div></div>
     <p class="sub">${txt}</p>
+    ${aguarda?'<div class="row"><button class="p" id="c_recheck">Já confirmei</button><button class="s" id="c_reenv">Reenviar e-mail</button></div>':''}
     <div class="row">${Store.podeRevisar?'<button class="p" data-t="itens">Ir para a Revisão</button>':''}${Store.canWrite?'':'<button class="s" data-t="minhas">Minhas propostas</button>'}<button class="s" id="c_out">Sair</button></div></div></div>`;
   }
   const campo=(id,rot,tipo,auto,v,dica)=>`<label class="fld" for="${id}"><span>${rot}</span><input id="${id}" data-fm="${id}" type="${tipo}" autocomplete="${auto}" value="${esc(v||'')}">${dica?`<small class="sub">${dica}</small>`:''}</label>`;
   const cad=modo==='cadastro';
   return `<div class="acesso"><div class="box">${aviso}
   <h2>${cad?'Pedir cadastro':'Entrar'}</h2>
-  <p class="sub">${cad?'Para revisar o PCA e enviar propostas é preciso ter cadastro. O NGI analisa cada pedido e você poderá entrar assim que for aprovado.':'Entre com seu e-mail institucional para iniciar a revisão do PCA. Consultar o painel não exige login.'}</p>
+  <p class="sub">${cad?'Para revisar o PCA e enviar propostas é preciso ter cadastro. Com e-mail <b>@fflorestal.sp.gov.br</b> o acesso é liberado automaticamente depois que você confirmar o e-mail; os demais e-mails de sp.gov.br são analisados pelo NGI.':'Entre com seu e-mail institucional para iniciar a revisão do PCA. Consultar o painel não exige login.'}</p>
   <div class="seg" role="tablist"><button type="button" role="tab" class="${!cad?'on':''}" data-modo="entrar">Já tenho cadastro</button><button type="button" role="tab" class="${cad?'on':''}" data-modo="cadastro">Pedir cadastro</button></div>
   <form id="f_acesso" novalidate>
     ${cad?campo('fm_nome','Nome completo','text','name',f.fm_nome)+campo('fm_setor','Setor / área','text','organization',f.fm_setor):''}
@@ -866,6 +879,7 @@ function bind(){
   const cv_=$('#c_ver');if(cv_)cv_.onclick=()=>{S.verSenha=!S.verSenha;draw();const e=$('#fm_senha');if(e){e.focus();e.setSelectionRange(e.value.length,e.value.length);}};
   const ce_=$('#c_esq');if(ce_)ce_.onclick=()=>Store.esqueci((F_().fm_email||'').trim());
   document.querySelectorAll('[data-ud]').forEach(b=>b.onclick=()=>{const [i,d,pp]=b.dataset.ud.split('|');Store.decidir(i,d,pp);});
+  const crc=$('#c_recheck');if(crc)crc.onclick=()=>Store.recheck();const cre=$('#c_reenv');if(cre)cre.onclick=()=>Store.reenviar();
   const co=$('#c_out');if(co)co.onclick=()=>Store.logout();
   const salvaJ=(id,v)=>{Cesta.set(Cesta.get().map(x=>x.id===id?{...x,just:v.trim()}:x));};
   document.querySelectorAll('[data-mj]').forEach(e=>e.onchange=()=>{salvaJ(e.dataset.mj,e.value);draw();});
