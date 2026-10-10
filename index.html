@@ -487,12 +487,26 @@ async function validar(id,dec){
   /* aprovar não exige justificativa; recusar continua exigindo o motivo */
   const j=dec==='aprovada'?'Aprovada pela coordenação.':await justificar('Recusar proposta · '+p.ref,p.antes,p.depois,'Motivo da recusa');
   if(j===null)return;
+  await decidirProp(p,dec,j);
+}
+async function validarLote(dec){
+  if(!Store.canWrite)return;
+  const ids=[...(S.sel||[])],L=ids.map(i=>(S.prop||[]).find(x=>x.id===i)).filter(p=>p&&p.status==='pendente');
+  if(!L.length){S.msg='Marque ao menos uma proposta pendente.';draw();return;}
+  const j=dec==='aprovada'?'Aprovada pela coordenação.':await justificar('Recusar '+L.length+' proposta(s) de uma vez',undefined,undefined,'Motivo da recusa (vale para todas as marcadas)');
+  if(j===null)return;
+  let ok=0;S.msg='Registrando '+L.length+' decisão(ões)…';draw();
+  for(const p of L){if(await decidirProp(p,dec,j,true))ok++;}
+  S.sel=[];S.msg=ok+' de '+L.length+' proposta(s) '+(dec==='aprovada'?'aprovada(s)':'recusada(s)')+'.'+(ok<L.length?' As demais continuam pendentes; tente de novo.':'');draw();
+}
+async function decidirProp(p,dec,j,lote){
+  const id=p.id;
   const aud={acao:'Validação: '+dec,cid:p.cid,ref:p.ref,antes:p.antes,depois:p.depois,just:j,prop:p.prop.nome+' · '+p.prop.setor,pjust:p.just};
   let ok;
   if(dec==='aprovada')ok=await Store.gravar(p.ap,aud,p.prop.nome+' (validado por '+who()+')');else ok=await Store.auditar(aud);
-  if(!ok)return;
-  try{await Store.fb.updProp(id,{status:dec,val:{uid:who(),at:new Date().toISOString(),coment:j}});}
-  catch(e){S.msg='A decisão foi aplicada, mas não consegui marcar a proposta ('+(e.code||e.message)+').';draw();}
+  if(!ok)return false;
+  try{await Store.fb.updProp(id,{status:dec,val:{uid:who(),at:new Date().toISOString(),coment:j}});return true;}
+  catch(e){S.msg='A decisão foi aplicada, mas não consegui marcar a proposta ('+(e.code||e.message)+').';if(!lote)draw();return false;}
 }
 async function getText(path){const r=await fetch(path+'?t='+Date.now());if(!r.ok)return null;return await r.text();}
 async function loadPNCP(){
@@ -570,10 +584,11 @@ const marcosDecreto=ano=>{const E=ano-1,d=(m,x)=>E+'-'+m+'-'+x,D='Decreto 67.689
  {nome:'Consolidação do PCA e envio para aprovação',resp:'NCP (setor de contratações), com validação do NGI',ini:d('05','16'),fim:d('06','15'),desc:D+'art. 10, § 3º: até a primeira quinzena de junho.'},
  {nome:'Aprovação do PCA pela autoridade competente',resp:'Diretoria Executiva',ini:d('06','16'),fim:d('06','30'),desc:D+'arts. 5º e 11: até o final de junho.'},
  {nome:'Divulgação e publicação do PCA aprovado',resp:'NCP',ini:d('07','01'),fim:d('07','15'),desc:D+'arts. 11 § 2º e 13, parágrafo único: até 15 dias após o encerramento da aprovação, revisão ou alteração.'},
- {nome:'Revisão pelas áreas requisitantes',resp:'Áreas requisitantes',ini:d('10','15'),fim:d('10','28'),desc:'Janela legal de revisão por adequação à proposta orçamentária: 15/10 a 15/11 (art. 14, I). Cada área revisa na tela Revisão os itens ainda não contratados e envia suas propostas.'},
- {nome:'Validação das propostas pelo NGI',resp:'NGI',ini:d('10','29'),fim:d('11','04'),desc:'Dentro da janela legal do art. 14, I. O NGI aprova ou recusa as propostas na Coordenação.'},
- {nome:'Adequação no sistema (PGC)',resp:'NGI / NCP',ini:d('11','05'),fim:d('11','11'),desc:'Dentro da janela legal do art. 14, I. Lançamento no PGC das alterações aprovadas.'},
- {nome:'Publicação do PCA revisado',resp:'NCP',ini:d('11','12'),fim:d('11','30'),desc:'Divulgação e publicação no PNCP até 15 dias após o encerramento da revisão (art. 13, parágrafo único).'},
+ {nome:'Revisão pelas áreas requisitantes',resp:'Áreas requisitantes',ini:d('10','15'),fim:d('10','26'),desc:'Janela legal de revisão por adequação à proposta orçamentária: 15/10 a 15/11 (art. 14, I). Cada área revisa na tela Revisão os itens ainda não contratados e envia suas propostas.'},
+ {nome:'Validação das propostas pelo NGI',resp:'NGI',ini:d('10','27'),fim:d('11','03'),desc:'Dentro da janela legal do art. 14, I. O NGI aprova ou recusa as propostas na Coordenação.'},
+ {nome:'Consolidação e liberação no sistema pelo NCP',resp:'NCP',ini:d('11','04'),fim:d('11','09'),desc:'Dentro da janela legal do art. 14, I. O NCP consolida as revisões aprovadas e libera o sistema para as áreas ajustarem.'},
+ {nome:'Ajuste no sistema (PGC) pelas áreas',resp:'Áreas requisitantes',ini:d('11','10'),fim:d('11','13'),desc:'Dentro da janela legal do art. 14, I (até 15/11). Cada área lança no sistema as alterações aprovadas, conforme a planilha de revisões aprovadas.'},
+ {nome:'Publicação do PCA revisado',resp:'NCP',ini:d('11','16'),fim:d('11','30'),desc:'Divulgação e publicação no PNCP até 15 dias após o encerramento da revisão (art. 13, parágrafo único).'},
  {nome:'Revisão após a publicação da Lei Orçamentária Anual',resp:'NGI / áreas requisitantes',ini:'',fim:'',desc:D+'art. 14, II: na quinzena posterior à publicação da LOA (informe as datas quando a LOA for publicada).'},
  {continua:true,nome:'Relatórios de gestão de riscos da execução',resp:'Áreas requisitantes',ini:d('07','01'),fim:d('11','30'),desc:D+'art. 18, §§ 1º e 2º: a partir de julho, com apresentação em julho, setembro e novembro.'}
 ].map((m,i)=>({id:'m'+(i+1),...m}));};
@@ -623,7 +638,10 @@ function calend(){
     const brM=v=>'R$ '+(v/1e6).toLocaleString('pt-BR',{maximumFractionDigits:1})+' mi';
     big_=`<div class="cards big">${big(d.cs.length,'contratações no PCA '+ano)}${big(brM(d.cs.reduce((t,c)=>t+c.total,0)),'valor estimado')}${kc?big(kc.size,'já contratadas (homologadas)','ok'):''}${R26?big(R26.filter(r=>r.sit===SIT26[2]).length,'sem contratação localizada','med'):''}${R26?big(R26.filter(r=>r.tipo!=='PCA').length,'contratos sem item no PCA','med'):''}${big(crit.size,'com pendência crítica','crit')}${big(rv.length,'a revisar (não contratadas)')}${big(pctR+'%','revisão concluída ('+feitas+' de '+rv.length+')')}${Store.canWrite?big(propP,'propostas aguardando validação'):''}</div>`;
     const ar={};d.cs.forEach(c=>{const k=c.area||'(sem área)';const x=ar[k]||(ar[k]={n:0,p:0,cr:0,sd:0,t:0});x.n++;x.t+=c.total;if(comPend.has(c.id))x.p++;if(crit.has(c.id))x.cr++;if(destOf(c)==='')x.sd++;});
-    h+=`<h3>O que falta por área</h3><div class="tw"><table><thead><tr><th>Área requisitante</th><th>Contratações</th><th>Com pendência</th><th>Críticas</th><th>Sem revisão</th><th></th></tr></thead><tbody>${Object.entries(ar).sort((a,b)=>b[1].p-a[1].p||b[1].t-a[1].t).map(([k,x])=>`<tr><td>${esc(k)}</td><td>${x.n}</td><td>${x.p?'<b>'+x.p+'</b>':'<span class="ok">0 ✓</span>'}</td><td>${x.cr||'0'}</td><td>${x.sd}</td><td><button class="s" data-go="${esc(k)}">Ver itens</button></td></tr>`).join('')}</tbody></table></div>`;
+    const mA=M.find(m=>/Revisão pelas áreas/.test(m.nome)),prazoA=mA?fmtD(mA.fim):'';
+    const lemb=(k,x)=>`Assunto: Revisão do PCA ${ano} – pendências da sua área\n\nPrezados,\n\nA revisão do PCA ${ano} da área ${k} ainda tem ${x.sd} contratação(ões) sem revisão${x.cr?' e '+x.cr+' com pendência crítica':''}${prazoA?'. O prazo para as áreas é '+prazoA:''}.\n\nAcesse https://fundacao-florestal.github.io/pca/ , entre com seu e-mail @fflorestal.sp.gov.br, abra a aba Revisão, filtre pela sua área e escolha o destino de cada item. Ao final, envie as propostas à coordenação.\n\nDúvidas: NGI.\n\nObrigada.`;
+    S._lemb=Object.fromEntries(Object.entries(ar).map(([k,x])=>[k,lemb(k,x)]));
+    h+=`<h3>O que falta por área</h3>${Store.canWrite?'<div class="row"><button class="s" id="lb_todas">Copiar lembrete de todas as áreas com pendência</button><span class="sub">Cola no e-mail ou no Teams. A coordenação envia.</span></div>':''}<div class="tw"><table><thead><tr><th>Área requisitante</th><th>Contratações</th><th>Com pendência</th><th>Críticas</th><th>Sem revisão</th><th></th></tr></thead><tbody>${Object.entries(ar).sort((a,b)=>b[1].p-a[1].p||b[1].t-a[1].t).map(([k,x])=>`<tr><td>${esc(k)}</td><td>${x.n}</td><td>${x.p?'<b>'+x.p+'</b>':'<span class="ok">0 ✓</span>'}</td><td>${x.cr||'0'}</td><td>${x.sd}</td><td><button class="s" data-go="${esc(k)}">Ver itens</button>${Store.canWrite&&x.sd?` <button class="s" data-lb="${esc(k)}">Copiar lembrete</button>`:''}</td></tr>`).join('')}</tbody></table></div>`;
   }
   return big_+h;
 }
@@ -638,7 +656,7 @@ function ger(){
   const N={a26:R?R.length:'—',contratadas:n(SIT26[0]),semcontr:n(SIT26[2]),sempca:n(SIT26[3]),pend:pend_,painel:'Resumo',cruz:'2026×2027',pncp:S.pn?S.pn.rows.filter(p=>String(p.ano)===String(S.ano)).length:'—'};
   const T={a26:'linhas, PCA 2026 × PNCP',contratadas:'itens contratados (homologados)',semcontr:'sem contratação localizada',sempca:'contratos sem item no PCA',pend:'pendências em aberto',painel:'por regra e por área',cruz:'itens que migram para 2027',pncp:'publicações no PNCP no ano do PCA'};
   const cards=`<div class="cards big gcards">${GVv.map(o=>`<button class="c gv ${vis===o[0]?'on':''}" data-gv="${o[0]}" aria-pressed="${vis===o[0]}"><b>${N[o[0]]}</b><span>${o[1]}<br>${T[o[0]]}</span></button>`).join('')}</div>`;
-  return `<p class="sub">Dados do <b>PCA ${S.ano}</b>${E26?'':' (o cruzamento com as contratações de 2026 aparece só no PCA 2026)'}. Clique em um quadro para ver os detalhes logo abaixo.</p>`+cards+(['pend','painel'].includes(vis)?`<div class="row"><label class="sub">Área</label><select id="farea"><option value="">Todas as áreas</option>${areas.map(a=>`<option ${S.farea===a?'selected':''}>${esc(a)}</option>`).join('')}</select></div>`:'')+({a26,contratadas:a26,semcontr:a26,sempca:a26,pend,painel,cruz,pncp}[vis])();
+  return `<p class="sub">PNCP coletado em ${S.pn?fmtDT(S.pn.coletado):'—'}. Dados do <b>PCA ${S.ano}</b>${E26?'':' (o cruzamento com as contratações de 2026 aparece só no PCA 2026)'}. Clique em um quadro para ver os detalhes logo abaixo.</p>`+cards+(['pend','painel'].includes(vis)?`<div class="row"><label class="sub">Área</label><select id="farea"><option value="">Todas as áreas</option>${areas.map(a=>`<option ${S.farea===a?'selected':''}>${esc(a)}</option>`).join('')}</select></div>`:'')+({a26,contratadas:a26,semcontr:a26,sempca:a26,pend,painel,cruz,pncp}[vis])();
 }
 function coord(){
   const sub=S.csub||'prop',pp=(S.prop||[]).filter(p=>p.status==='pendente').length,cp=(Store.usuarios||[]).filter(u=>u.status==='pendente').length;
@@ -649,8 +667,8 @@ function coord(){
 function draw(){
   const nc=Cesta.get().length;
   const pp=(S.prop||[]).filter(p=>p.status==='pendente').length+((Store.usuarios||[]).filter(u=>u.status==='pendente').length);
-  const tabs=[['cal','Início'],['itens','Revisão'+(recusadasNovas().length?' ('+recusadasNovas().length+')':'')]].concat(Store.podeRevisar?[['ger','Painel gerencial']]:[]).concat(Store.podeRevisar&&!Store.canWrite?[['minhas','Minhas propostas'+(nc?' ('+nc+')':'')]]:[]).concat(Store.canWrite?[['coord','Coordenação'+(pp?' ('+pp+')':'')]]:[]);
-  if(!['cal','itens','ger','coord','minhas','cfg'].includes(S.tab)||(S.tab==='coord'&&!Store.canWrite)||(S.tab==='ger'&&!Store.podeRevisar)||(S.tab==='minhas'&&!Store.podeRevisar))S.tab='cal';
+  const tabs=[['cal','Início'],['itens','Revisão'+(recusadasNovas().length?' ('+recusadasNovas().length+')':'')]].concat(Store.podeRevisar?[['ger','Painel gerencial']]:[]).concat(Store.podeRevisar&&!Store.canWrite?[['minhas','Minhas propostas'+(nc?' ('+nc+')':'')]]:[]).concat(Store.canWrite?[['coord','Coordenação'+(pp?' ('+pp+')':'')]]:[]).concat([['ajuda','Ajuda']]);
+  if(!['cal','itens','ger','coord','minhas','cfg','ajuda'].includes(S.tab)||(S.tab==='coord'&&!Store.canWrite)||(S.tab==='ger'&&!Store.podeRevisar)||(S.tab==='minhas'&&!Store.podeRevisar))S.tab='cal';
     if(!GV.some(o=>o[0]===S.vis))S.vis='a26';
   if(S.ano==='todos')S.ano=2026;
   const age=S.pn&&S.pn.coletado?(Date.now()-new Date(S.pn.coletado))/864e5:null;
@@ -661,12 +679,22 @@ function draw(){
   if(S.msg&&S.tab!=='cfg')h+=`<div class="msg">${esc(S.msg)}</div>`;
   h+=`<nav>${tabs.map(t=>`<button data-t="${t[0]}" class="${S.tab==t[0]?'on':''}">${t[1]}</button>`).join('')}</nav>`;
   if((S.tab==='cal'||S.tab==='itens'||S.tab==='ger')&&!yrs().length)h+=`<div class="box">PCA ${S.ano} ainda não está no repositório. Envie <code>pca_${S.ano}.csv</code> ao repositório e rode a rotina em Actions (ou espere a próxima execução).</div>`;
-  else h+=({cal:calend,itens,ger,coord,minhas,cfg}[S.tab])();
+  else h+=({cal:calend,itens,ger,coord,minhas,cfg,ajuda}[S.tab])();
   $('#app').innerHTML=h;
   document.querySelectorAll('[data-ano]').forEach(b=>b.onclick=()=>{S.ano=b.dataset.ano==='todos'?'todos':+b.dataset.ano;draw();});
   document.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{S.tab=b.dataset.t;window.scrollTo(0,0);draw();});
   const rl=$('#rl');if(rl)rl.onclick=async()=>{S.pnMsg='Recarregando…';draw();await Store.load();await loadPNCP();await loadPCAFolder();S.pnMsg='';draw();};
   bind();
+}
+function ajuda(){
+  const P=(t,b)=>`<details class="box"><summary><b>${t}</b></summary><div style="margin-top:8px">${b}</div></details>`;
+  return `<p class="sub">Guia rápido para quem vai revisar o PCA. Em caso de dúvida, fale com o NGI.</p>
+  ${P('1. Como entrar','<ol><li>Toque em <b>Entrar</b> (canto superior) e depois em <b>Criar cadastro</b>.</li><li>Use o e-mail <b>@fflorestal.sp.gov.br</b>. Outros e-mails não são aceitos.</li><li>Abra o e-mail de confirmação que chegou (veja também o spam), clique no link e volte ao sistema tocando em <b>Já confirmei</b>. O acesso é liberado automaticamente.</li></ol>')}
+  ${P('2. Como revisar','<ol><li>Escolha o <b>PCA 2026</b> ou <b>2027</b> no cabeçalho.</li><li>Abra a aba <b>Revisão</b>. Ela lista só os itens ainda não contratados.</li><li>Para cada item, escolha uma opção: <b>Manter no PCA</b>, <b>Atualizar para o PCA seguinte</b>, <b>Contratação antecipada</b>, <b>Cancelar – não é mais necessário</b> ou <b>Realizado por outros fins</b>. Só <b>Manter</b> dispensa justificativa.</li><li>Use o filtro de área para ver só os seus itens.</li><li>Suas escolhas ficam guardadas como rascunho na sua conta. Você pode sair e continuar depois.</li></ol>')}
+  ${P('3. Como enviar para a coordenação','<ol><li>Em cada item, clique em <b>Gravar revisão</b> para guardar a sua escolha e a justificativa.</li><li>Quando terminar, abra <b>Minhas propostas</b>, confira a lista e clique em <b>Enviar todas à coordenação</b>. O NGI aprova ou recusa.</li><li>Itens enviados e em análise saem da sua tela de Revisão. Os aprovados também saem.</li><li>Se uma proposta for <b>recusada</b>, você é avisado na aba Revisão, com o motivo, e pode ajustar e enviar de novo.</li><li>Em <b>Minhas propostas</b> você baixa uma planilha com tudo o que propôs.</li></ol>')}
+  ${P('4. O que acontece depois','<p>Fluxo da revisão: <b>áreas revisam</b> → <b>NGI valida</b> → <b>NCP consolida e libera o sistema</b> → <b>áreas ajustam no sistema (PGC)</b> → <b>publicação</b>. As datas estão na aba <b>Início</b>.</p><p>Depois da aprovação, cada área deve lançar no sistema as alterações aprovadas. A coordenação disponibiliza a planilha de revisões aprovadas, com a ação a fazer em cada item.</p>')}
+  ${P('5. Painel gerencial','<p>Mostra os números do PCA escolhido no cabeçalho: contratadas, sem contratação, pendências, situação no PNCP. Clique nos quadros para ver os detalhes abaixo. Exige login.</p>')}
+  ${P('6. Problemas comuns','<ul><li><b>Não recebi o e-mail de confirmação:</b> veja o spam e use <b>Reenviar e-mail</b> na tela de acesso.</li><li><b>Esqueci a senha:</b> use <b>Esqueci a senha</b> na tela de acesso.</li><li><b>Meu item não aparece na Revisão:</b> ele pode já estar contratado, em análise ou aprovado.</li></ul>')}`;
 }
 function painel(){
   const d=cur(),v=vals();const n=x=>v.filter(a=>a.sev==x).length;
@@ -808,8 +836,9 @@ function prop(){
   const pode=Store.canWrite;
   return `<div class="cards"><div class="c"><b>${cnt('pendente')}</b><span>aguardando validação</span></div><div class="c"><b>${cnt('aprovada')}</b><span>aprovadas</span></div><div class="c"><b>${cnt('recusada')}</b><span>recusadas (sem as já aprovadas depois)</span></div><div class="c"><b>${quem}</b><span>proponentes</span></div></div>
   <div class="row"><select id="pf">${[['pendente','Pendentes'],['aprovada','Aprovadas'],['recusada','Recusadas'],['todas','Todas']].map(o=>`<option value="${o[0]}" ${pf==o[0]?'selected':''}>${o[1]}</option>`).join('')}</select><input id="pq" placeholder="Buscar por DFD, pessoa, setor ou texto" value="${esc(S.pq||'')}" style="min-width:260px"><button class="s" id="px">Exportar planilha (CSV)</button><span class="sub">${L.length} proposta(s)</span></div>
+  ${pode&&pf==='pendente'?`<div class="row"><span class="sub">${(S.sel||[]).length} marcada(s)</span><button class="p" id="pl_ok" ${(S.sel||[]).length?'':'disabled'}>Aprovar marcadas</button><button class="s" id="pl_no" ${(S.sel||[]).length?'':'disabled'}>Recusar marcadas</button></div>`:''}
   ${pode?'':`<div class="msg">Entre com a conta Google da coordenação em Configurações para ver e decidir as propostas.</div>`}
-  <div class="tw"><table><thead><tr><th>Recebida</th><th>Proponente</th><th>Item</th><th>O que muda</th><th>Justificativa do proponente</th><th>Situação</th><th>${pode?'Decisão':'Validação'}</th></tr></thead><tbody>${L.map(p=>`<tr><td>${fmtDT(p.at)}</td><td><b>${esc(p.prop.nome)}</b><br><span class="sub">${esc(p.prop.setor)}<br>${esc(p.prop.email)}<br>Protocolo ${esc(p.lote||'—')}</span></td><td><b>${esc(p.ref)}</b><br><span class="sub">${esc(p.titulo)}<br>${esc(p.area)}</span></td><td><span class="sub">${esc(p.acao)}</span><br>De: ${esc(p.antes||'—')}<br><b>Para: ${esc(p.depois||'—')}</b></td><td>${esc(p.just)}</td><td>${tg(p.status,p)}</td><td>${p.status==='pendente'?(pode?`<button class="p" data-pv="${p.id}|aprovada">Aprovar</button> <button class="s" data-pv="${p.id}|recusada">Recusar</button>`:'<span class="sub">—</span>'):`<span class="sub">${esc(p.val.uid)} · ${fmtDT(p.val.at)}<br>${esc(p.val.coment)}</span>`}</td></tr>`).join('')||'<tr><td colspan="7" class="sub">Nenhuma proposta neste filtro.</td></tr>'}</tbody></table></div>`;
+  <div class="tw"><table><thead><tr>${pode&&pf==='pendente'?'<th><input type="checkbox" id="psall" aria-label="Marcar todas as propostas pendentes listadas"></th>':''}<th>Recebida</th><th>Proponente</th><th>Item</th><th>O que muda</th><th>Justificativa do proponente</th><th>Situação</th><th>${pode?'Decisão':'Validação'}</th></tr></thead><tbody>${L.map(p=>`<tr>${pode&&pf==='pendente'?`<td><input type="checkbox" data-psel="${p.id}" ${(S.sel||[]).includes(p.id)?'checked':''} aria-label="Marcar proposta ${esc(p.ref)}"></td>`:''}<td>${fmtDT(p.at)}</td><td><b>${esc(p.prop.nome)}</b><br><span class="sub">${esc(p.prop.setor)}<br>${esc(p.prop.email)}<br>Protocolo ${esc(p.lote||'—')}</span></td><td><b>${esc(p.ref)}</b><br><span class="sub">${esc(p.titulo)}<br>${esc(p.area)}</span></td><td><span class="sub">${esc(p.acao)}</span><br>De: ${esc(p.antes||'—')}<br><b>Para: ${esc(p.depois||'—')}</b></td><td>${esc(p.just)}</td><td>${tg(p.status,p)}</td><td>${p.status==='pendente'?(pode?`<button class="p" data-pv="${p.id}|aprovada">Aprovar</button> <button class="s" data-pv="${p.id}|recusada">Recusar</button>`:'<span class="sub">—</span>'):`<span class="sub">${esc(p.val.uid)} · ${fmtDT(p.val.at)}<br>${esc(p.val.coment)}</span>`}</td></tr>`).join('')||'<tr><td colspan="8" class="sub">Nenhuma proposta neste filtro.</td></tr>'}</tbody></table></div>`;
 }
 function hist(){
   if(!Store.canWrite)return '<div class="msg">O histórico completo é visível à coordenação validadora (entre em Configurações).</div>';
@@ -854,9 +883,45 @@ function cad(){
   return `<p class="sub">Pedidos de cadastro. <b>Proponente</b> (as áreas): faz a revisão e envia propostas. <b>Validador</b>: além disso, lê as propostas e grava decisões. Só quem você aprovar aqui entra.</p>
   <div class="tw"><table><thead><tr><th>Pedido em</th><th>Nome</th><th>Setor</th><th>E-mail</th><th>Situação</th><th>Ação</th></tr></thead><tbody>${U.map(u=>`<tr><td>${fmtDT(u.at)}</td><td><b>${esc(u.nome)}</b></td><td>${esc(u.setor)}</td><td>${esc(u.email)}</td><td>${tg(u.status)}${u.por?'<br><span class="sub">por '+esc(u.por)+'</span>':''}</td><td>${u.id===(Store.me||{}).uid?'<span class="sub">você</span>':u.status==='pendente'?`<button class="p" data-ud="${u.id}|aprovado|proponente">Aprovar como proponente</button> <button class="s" data-ud="${u.id}|aprovado|validador">Aprovar como validador</button> <button class="s" data-ud="${u.id}|recusado">Recusar</button>`:u.status==='aprovado'?`<span class="tag ${u.papel==='validador'?'ok':'med'}">${u.papel==='validador'?'Validador(a)':'Proponente'}</span> ${u.papel==='validador'?`<button class="s" data-ud="${u.id}|aprovado|proponente">Rebaixar para proponente</button>`:`<button class="p" data-ud="${u.id}|aprovado|validador">Promover a validador</button>`} <button class="s" data-ud="${u.id}|revogado">Revogar acesso</button>`:`<button class="s" data-ud="${u.id}|aprovado|proponente">Aprovar como proponente</button>`}</td></tr>`).join('')||'<tr><td colspan="6" class="sub">Nenhum pedido de cadastro ainda.</td></tr>'}</tbody></table></div>`;
 }
+/* ===== Revisões aprovadas: planilha para as áreas ajustarem no sistema de compras ===== */
+function acaoSistema(t,v,ano){
+  const a=ano||'',n=ano?ano+1:'';
+  if(t==='dest')return ({manter:'Manter o DFD no PCA '+a+'. Sem alteração no sistema; apenas conferir os dados.',proximo:'Retirar o DFD do PCA '+a+' e incluí-lo no PCA '+n+'.',antecipada:'Registrar a contratação antecipada, conforme a justificativa.',cancelar:'Cancelar o DFD no PCA '+a+'.',outros:'Retirar o DFD do PCA '+a+' (realizado por outros fins), registrando o motivo.'})[v]||'Conferir a decisão e ajustar no sistema.';
+  if(t==='ov')return 'Alterar no sistema os campos indicados (De → Para).';
+  if(t==='aj')return 'Corrigir no sistema o dado apontado.';
+  if(t==='vinc')return 'Nenhuma ação no sistema (vínculo interno com o PNCP).';
+  return 'Conferir a decisão e ajustar no sistema.';
+}
+function revisoesAprovadas(){
+  const csAll=[...(S.ds[2026]?S.ds[2026].cs:[]),...(S.ds[2027]?S.ds[2027].cs:[])];
+  const byId=id=>csAll.find(c=>String(c.id)===String(id))||{};
+  const mapa=new Map();
+  (S.prop||[]).filter(p=>p.status==='aprovada').forEach(p=>{
+    const ap=p.ap||{},t=ap.t||'',key=t+'|'+(t==='aj'?ap.id:t==='vinc'?ap.key:p.cid);
+    const ant=mapa.get(key);if(ant&&String(ant.val||'')>String(p.val&&p.val.at||''))return;
+    const c=byId(p.cid);
+    mapa.set(key,{val:p.val&&p.val.at||'',ano:p.ano||c.ano||'',ref:p.ref,titulo:p.titulo||c.titulo||'',area:p.area||c.area||'',tipo:t==='dest'?dLabel(ap.v,+p.ano||c.ano):p.acao,antes:p.antes,depois:p.depois,just:p.just,quem:p.prop?p.prop.nome:'',setor:p.prop?p.prop.setor:'',email:p.prop?p.prop.email:'',validou:p.val?p.val.uid:'',em:p.val?p.val.at:'',acao:acaoSistema(t,ap.v,+(p.ano||c.ano)||0)});
+  });
+  /* decisões lançadas direto pela coordenação (sem proposta) */
+  const deProp=new Set((S.prop||[]).map(p=>p.cid));
+  (S.aud||[]).filter(a=>!/^Valida/.test(a.acao||'')&&a.cid&&!deProp.has(a.cid)).forEach(a=>{
+    const c=byId(a.cid),key='aud|'+a.cid+'|'+a.acao;
+    mapa.set(key,{val:a.at,ano:c.ano||'',ref:a.ref,titulo:c.titulo||'',area:c.area||'',tipo:a.acao,antes:a.antes,depois:a.depois,just:a.just,quem:'(coordenação)',setor:'NGI',email:a.uid,validou:a.uid,em:a.at,acao:'Conferir a decisão e ajustar no sistema.'});
+  });
+  return [...mapa.values()].sort((x,y)=>String(x.area).localeCompare(String(y.area))||String(x.ref).localeCompare(String(y.ref)));
+}
+function xAprovadas(area){
+  const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+  const L=revisoesAprovadas().filter(x=>!area||x.area===area);
+  const c=['PCA','DFD','Título','Área','Tipo de revisão','De','Para','Justificativa','Proposto por','Setor','E-mail do proponente','Validado por','Data da validação','Ação a fazer no sistema de compras','Quem faz','Feito no sistema? (sim/não)','Data do ajuste','Observação'];
+  save('revisoes_aprovadas'+(area?'_'+area.replace(/[^\w]+/g,'_').slice(0,40):'')+'.csv','\ufeff'+[c.join(';')].concat(L.map(x=>[x.ano,x.ref,x.titulo,x.area,x.tipo,x.antes,x.depois,x.just,x.quem,x.setor,x.email,x.validou,x.em,x.acao,x.area,'','',''].map(q).join(';'))).join('\n'));
+}
 function dados(){
   const d=cur(),nx=S.ds[S.ano+1];
-  return `<div class="box"><b>Conferir um PCA fora do repositório</b><p class="sub">Carrega um CSV só nesta tela, para teste. Para valer para todos, envie <code>pca_2026.csv</code> / <code>pca_2027.csv</code> ao repositório: a rotina converte e publica sozinha.</p>
+  const RA=revisoesAprovadas(),areasRA=[...new Set(RA.map(x=>x.area).filter(Boolean))].sort(),porTipo={};RA.forEach(x=>{porTipo[x.tipo]=(porTipo[x.tipo]||0)+1;});
+  return `<div class="box"><b>Revisões aprovadas · planilha para ajuste no sistema de compras</b><p class="sub">Reúne todas as revisões aprovadas (qualquer tipo), com a justificativa, quem propôs e quem validou. Cada linha traz a <b>ação a fazer no sistema</b> e colunas para a área marcar se já ajustou. A orientação é padrão; o NCP confirma o procedimento no sistema. <b>${RA.length}</b> revisão(ões) aprovada(s)${RA.length?': '+Object.entries(porTipo).map(([k,n])=>esc(k)+' ('+n+')').join(' · '):''}.</p>
+  <div class="row"><select id="xa_area"><option value="">Todas as áreas</option>${areasRA.map(a=>`<option ${S.xaArea===a?'selected':''}>${esc(a)}</option>`).join('')}</select><button class="p" id="xa_bt" ${RA.length?'':'disabled'}>Baixar planilha</button></div></div>
+  <div class="box"><b>Conferir um PCA fora do repositório</b><p class="sub">Carrega um CSV só nesta tela, para teste. Para valer para todos, envie <code>pca_2026.csv</code> / <code>pca_2027.csv</code> ao repositório: a rotina converte e publica sozinha.</p>
   <div class="row">${[2026,2027].map(a=>`<label class="s">PCA ${a}${S.ds[a]?' ✓':''} <input type="file" accept=".csv,.txt" data-up="${a}" hidden></label>`).join('')}</div></div>
   <div class="box"><b>Exportar PCA ${S.ano} adequado</b><p class="sub">Aplica as edições da aba Contratações e <b>remove</b> os itens marcados como "Cancelar" ou "Enviar ao PCA seguinte". Reenvie ao sistema após conferência.</p>
   <div class="row"><button class="p" id="exp" ${d?'':'disabled'}>Baixar CSV adequado</button><button class="s" id="expn" ${d?'':'disabled'}>Baixar itens enviados ao PCA ${S.ano+1}</button><button class="s" id="expr" ${d?'':'disabled'}>Baixar relatório de apontamentos</button></div></div>`;
@@ -866,6 +931,10 @@ function bind(){
   document.querySelectorAll('[data-f26]').forEach(b=>b.onclick=()=>{S.f26={...F26[b.dataset.f26]};draw();});const x=$('#x26');if(x)x.onclick=x26;
   document.querySelectorAll('[data-ed]').forEach(b=>b.onclick=()=>edit(b.dataset.ed));
   const pf=$('#pf');if(pf)pf.onchange=()=>{S.pf=pf.value;draw();};const pq=$('#pq');if(pq)pq.oninput=()=>{S.pq=pq.value;draw();const n=$('#pq');if(n){n.focus();n.setSelectionRange(n.value.length,n.value.length);}};
+  const xas=$('#xa_area');if(xas)xas.onchange=()=>{S.xaArea=xas.value;};const xab=$('#xa_bt');if(xab)xab.onclick=()=>xAprovadas(($('#xa_area')||{}).value||'');
+  document.querySelectorAll('[data-psel]').forEach(c=>c.onchange=()=>{const s_=new Set(S.sel||[]);c.checked?s_.add(c.dataset.psel):s_.delete(c.dataset.psel);S.sel=[...s_];draw();});
+  const psa=$('#psall');if(psa)psa.onchange=()=>{const ids=[...document.querySelectorAll('[data-psel]')].map(c=>c.dataset.psel);S.sel=psa.checked?ids:[];draw();};
+  const plo=$('#pl_ok');if(plo)plo.onclick=()=>validarLote('aprovada');const pln=$('#pl_no');if(pln)pln.onclick=()=>validarLote('recusada');
   document.querySelectorAll('[data-pv]').forEach(b=>b.onclick=()=>{const [i,d]=b.dataset.pv.split('|');validar(i,d);});
   const px=$('#px');if(px)px.onclick=()=>{const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';const c=['Protocolo','Recebida em','PCA','DFD','Título','Área','Proponente','Setor','E-mail','Ação','De','Para','Justificativa do proponente','Situação','Validado por','Data da validação','Comentário da validação'];save('propostas_pca.csv','\ufeff'+[c.join(';')].concat((S.prop||[]).map(p=>[p.lote,p.at,p.ano,p.ref,p.titulo,p.area,p.prop.nome,p.prop.setor,p.prop.email,p.acao,p.antes,p.depois,p.just,p.status,(p.val||{}).uid,(p.val||{}).at,(p.val||{}).coment].map(q).join(';'))).join('\n'));};
   document.querySelectorAll('[data-fm]').forEach(e=>e.oninput=()=>{(S.fm=S.fm||{})[e.dataset.fm]=e.value;});
@@ -873,6 +942,9 @@ function bind(){
   const vr=$('#verrev');if(vr)vr.onchange=()=>{S.verRev=vr.checked;draw();};
   document.querySelectorAll('[data-gv]').forEach(b=>b.onclick=()=>{S.vis=b.dataset.gv;const f=gfOf(S.vis);if(f)S.f26={...f};draw();});const fa=$('#farea');if(fa)fa.onchange=()=>{S.farea=fa.value;draw();};
   document.querySelectorAll('[data-cs]').forEach(b=>b.onclick=()=>{S.csub=b.dataset.cs;draw();});
+  const copiar=async t=>{try{await navigator.clipboard.writeText(t);toast('Lembrete copiado. Cole no e-mail.');}catch(e){const a=document.createElement('textarea');a.value=t;document.body.appendChild(a);a.select();try{document.execCommand('copy');toast('Lembrete copiado. Cole no e-mail.');}catch(_){toast('Não foi possível copiar.');}a.remove();}};
+  document.querySelectorAll('[data-lb]').forEach(b=>b.onclick=()=>copiar((S._lemb||{})[b.dataset.lb]||''));
+  const lbt=$('#lb_todas');if(lbt)lbt.onclick=()=>{const ks=Object.keys(S._lemb||{}).filter(k=>/ainda tem [1-9]/.test(S._lemb[k]));copiar(ks.map(k=>'=== '+k+' ===\n'+S._lemb[k]).join('\n\n---\n\n'));};
   document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{S.farea=b.dataset.go;S.tab='itens';window.scrollTo(0,0);draw();});
   const mx=$('#mi_x');if(mx)mx.onclick=()=>xMinhas();document.querySelectorAll('[data-mx]').forEach(b=>b.onclick=()=>xMinhas(b.dataset.mx));
   document.querySelectorAll('[data-modo]').forEach(b=>b.onclick=()=>{S.cfgModo=b.dataset.modo;S.msg='';draw();});
