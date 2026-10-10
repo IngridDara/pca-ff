@@ -41,9 +41,9 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Propostas: só envia quem está logado e com cadastro aprovado; só a coordenação lê e decide.
+    // Propostas: só envia quem está logado e com cadastro aprovado; a coordenação lê e decide; cada pessoa lê as suas próprias.
     match /propostas/{id} {
-      allow read: if validador();
+      allow read: if validador() || (request.auth != null && resource.data.uid == request.auth.uid);
       allow create: if request.auth != null
         && get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.status == 'aprovado'
         && request.resource.data.uid == request.auth.uid
