@@ -72,6 +72,14 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Rascunhos da revisão: cada pessoa (com cadastro aprovado) lê e grava só o seu.
+    match /rascunhos/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid
+        && get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.status == 'aprovado'
+        && (request.method == 'delete' || (request.resource.data.keys().hasOnly(['itens','at'])
+          && request.resource.data.itens is list && request.resource.data.itens.size() <= 600));
+    }
+
     // Decisões já validadas: leitura pública (o painel mostra a todos); gravação só da coordenação.
     match /decisoes/{id} {
       allow read: if true;

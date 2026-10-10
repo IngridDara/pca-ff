@@ -74,6 +74,8 @@ dialog label{display:block;margin:8px 0 2px;font-size:12px;color:var(--mut)}dial
       setDecisao:(id,o)=>F.setDoc(F.doc(db,'decisoes',id),clean(o)),
       addAudit:o=>F.addDoc(F.collection(db,'auditoria'),clean(o)),
       async enviar(lote,itens){const b=F.writeBatch(db);itens.forEach(it=>b.set(F.doc(F.collection(db,'propostas')),{...clean(it),lote,uid:au.currentUser.uid,status:'pendente',criadoEm:F.serverTimestamp()}));await b.commit();},
+      async getRascunho(uid){const d=await F.getDoc(uref('rascunhos',uid));return d.exists()?d.data():null;},
+      setRascunho:(uid,itens)=>F.setDoc(uref('rascunhos',uid),{itens:JSON.parse(JSON.stringify(itens)),at:new Date().toISOString()}),
       updProp:(id,patch)=>F.updateDoc(F.doc(db,'propostas',id),clean(patch)),
       watchMinhas(uid,cb,err){return F.onSnapshot(F.query(F.collection(db,'propostas'),F.where('uid','==',uid)),snap=>cb(snap.docs.map(d=>{const x=d.data();return {id:d.id,...x,at:iso(x.criadoEm||x.at)};})),err);},
       watch(nome,cb,err){return F.onSnapshot(F.query(F.collection(db,nome),F.orderBy(nome==='auditoria'?'at':'criadoEm')),
@@ -299,7 +301,7 @@ const Store={
     this.me={uid:u.uid,email:u.email,name:r.nome||u.email,setor:r.setor||'',papel:r.papel||'',validador:r.validador,admin:r.admin,status:r.status};
     this.unsub.forEach(f=>f&&f());this.unsub=[];this.data.auditoria=[];this.data.propostas=[];this.usuarios=[];
     S.minhas=[];
-    if(r.validador)this.assistir();else if(r.status==='aprovado')this.assistirMinhas(u.uid);
+    if(r.validador)this.assistir();else if(r.status==='aprovado'){this.assistirMinhas(u.uid);this.carregarRascunho(u.uid);}
   },
   async entrar(){
     this.fb=await FBP;
@@ -312,6 +314,14 @@ const Store={
         if(primeira){primeira=false;res();}
       });});
   },
+  /* rascunhos da revisão: guardados também no banco (Firestore), por conta, para não se perderem ao trocar de navegador */
+  agendaRasc(){if(!this.me||this.me.validador||this.me.status!=='aprovado'||!this.fb)return;clearTimeout(this._tr);S.rascSt='salvando';this._tr=setTimeout(async()=>{try{await this.fb.setRascunho(this.me.uid,Cesta.get());S.rascSt='salvo';}catch(e){S.rascSt='erro';}draw();},900);},
+  async carregarRascunho(uid){
+    try{const r=await this.fb.getRascunho(uid),la=LS.get(kU('cesta_at')),loc=Cesta.get();
+      if(r&&Array.isArray(r.itens)&&(!la||String(r.at)>la)){Cesta.setLocal(r.itens,r.at);S.rascSt='salvo';}
+      else if(loc.length&&(!r||la>String(r.at)))this.agendaRasc();
+      else S.rascSt='salvo';}catch(e){S.rascSt='erro';}
+    draw();},
   assistirMinhas(uid){this.unsub.push(this.fb.watchMinhas(uid,l=>{S.minhas=l.sort((a,b)=>String(b.at).localeCompare(String(a.at)));const n=recusadasNovas().length;if(n&&!this._avisou){this._avisou=true;setTimeout(()=>toast('Você tem '+n+' revisão(ões) recusada(s). Veja os motivos na tela Revisão.'),400);}draw();},e=>{}));},
   assistir(){
     const falha=e=>{S.msg='Sem permissão para ler os registros ('+(e.code||e.message)+').';draw();};
@@ -402,7 +412,9 @@ async function registrar(acao,cid,rotulo,antes,depois,ap){
 /* ===== Quem não é validador PROPÕE: identifica-se uma vez, acumula as propostas na cesta e envia todas de uma vez ===== */
 /* rascunhos e envios ficam neste navegador, separados por conta (cada pessoa vê só os seus) */
 const kU=k=>k+(Store.me?'_'+Store.me.uid:'');
-const Cesta={get(){try{return JSON.parse(LS.get(kU('cesta'))||'[]')}catch(e){return[]}},set(a){LS.set(kU('cesta'),JSON.stringify(a))}};
+const Cesta={get(){try{return JSON.parse(LS.get(kU('cesta'))||'[]')}catch(e){return[]}},
+  set(a){LS.set(kU('cesta'),JSON.stringify(a));LS.set(kU('cesta_at'),new Date().toISOString());Store.agendaRasc();},
+  setLocal(a,at){LS.set(kU('cesta'),JSON.stringify(a));LS.set(kU('cesta_at'),at||new Date().toISOString());}};
 const Envios={get(){try{return JSON.parse(LS.get(kU('enviadas'))||'[]')}catch(e){return[]}},add(x){LS.set(kU('enviadas'),JSON.stringify([x].concat(this.get()).slice(0,30)))}};
 const ident=()=>Store.me?{nome:Store.me.name,setor:Store.me.setor||'',email:Store.me.email}:{nome:'',setor:'',email:''};
 const identOk=i=>Store.podeRevisar&&i.nome&&i.nome.length>=3&&i.setor&&/^[^@\s]+@[^@\s]*sp\.gov\.br$/i.test(i.email);
@@ -428,11 +440,11 @@ function proporAlteracao(base){
 }
 function xMinhas(lote){
   const i=ident(),q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
-  const L=[];
-  Envios.get().filter(e=>!lote||e.lote===lote).slice().reverse().forEach(e=>(e.itens||[]).forEach(x=>L.push(['Enviada',e.lote,fmtDT(e.at),x.ano,x.ref,x.titulo,x.area,x.acao,x.antes,x.depois,x.just])));
-  if(!lote)Cesta.get().forEach(x=>L.push(['Rascunho (não enviada)','',fmtDT(x.at),x.ano,x.ref,x.titulo,x.area,x.acao,x.antes,x.depois,x.just]));
+  const L=[],st={pendente:'Enviada, em análise',aprovada:'Aprovada',recusada:'Recusada'};
+  (S.minhas||[]).filter(x=>!lote||x.lote===lote).slice().reverse().forEach(x=>L.push([st[x.status]||x.status,x.lote,fmtDT(x.at),x.ano,x.ref,x.titulo,x.area,x.acao,x.antes,x.depois,x.just,(x.val&&x.val.coment)||'']));
+  if(!lote)Cesta.get().forEach(x=>L.push(['Rascunho (não enviada)','',fmtDT(x.at),x.ano,x.ref,x.titulo,x.area,x.acao,x.antes,x.depois,x.just,'']));
   if(!L.length){S.msg='Ainda não há alterações para baixar.';draw();return;}
-  const c=['Situação','Protocolo','Data','PCA','DFD','Título','Área','Tipo de alteração','De','Para','Justificativa','Proponente','Setor','E-mail'];
+  const c=['Situação','Protocolo','Data','PCA','DFD','Título','Área','Tipo de alteração','De','Para','Justificativa','Retorno da coordenação','Proponente','Setor','E-mail'];
   save('minhas_alteracoes_pca'+(lote?'_'+lote:'')+'.csv','\ufeff'+[c.join(';')].concat(L.map(r=>r.concat([i.nome,i.setor,i.email]).map(q).join(';'))).join('\n'));
 }
 function minhas(){
@@ -441,7 +453,7 @@ function minhas(){
   <div class="tw"><table><thead><tr><th>Item</th><th>O que muda</th><th>Justificativa</th><th></th></tr></thead><tbody>${C.map(p=>`<tr><td><b>${esc(p.ref)}</b><br><span class="sub">${esc(p.titulo)}</span></td><td><span class="sub">${esc(p.acao)}</span><br>De: ${esc(p.antes||'—')}<br><b>Para: ${esc(p.depois||'—')}</b></td><td><textarea data-mj="${p.id}" rows="2" class="${justOk(p)?'':'falta'}" placeholder="${exigeJ(p)?'Justificativa (obrigatória, mínimo '+JUST_MIN+' caracteres)':'Justificativa (opcional ao manter no PCA)'}" style="width:100%;min-width:200px">${esc(p.just||'')}</textarea></td><td><button class="s" data-rm="${p.id}">Remover</button></td></tr>`).join('')||'<tr><td colspan="4" class="sub">Nenhuma proposta na cesta. Faça revisões na aba Itens do PCA: elas ficam aqui até você enviar.</td></tr>'}</tbody></table></div>
   <div class="row" style="margin-top:12px"><button class="p" id="mi_env" ${C.length?'':'disabled'}>Enviar todas à coordenação (${C.length})</button><button class="s" id="mi_x">Baixar tabela das minhas alterações</button></div>
   ${(S.minhas||[]).length?`<h3>Situação das propostas enviadas</h3><div class="tw"><table><thead><tr><th>Item</th><th>O que propus</th><th>Situação</th><th>Retorno da coordenação</th></tr></thead><tbody>${S.minhas.map(x=>`<tr><td><b>${esc(x.ref)}</b><br><span class="sub">${esc(x.titulo||'')}</span></td><td>${esc(x.depois||'')}</td><td>${x.status==='aprovada'?'<span class="tag ok">Aprovada</span>':x.status==='recusada'?'<span class="tag crit">Recusada</span>':'<span class="tag med">Em análise</span>'}</td><td>${x.status==='recusada'?esc((x.val&&x.val.coment)||'—'):x.status==='aprovada'?'Aplicada ao PCA':'—'}</td></tr>`).join('')}</tbody></table></div>`:''}
-  ${E.length?`<h3>Já enviadas</h3><div class="tw"><table><thead><tr><th>Protocolo</th><th>Data</th><th>Propostas</th><th></th></tr></thead><tbody>${E.map(e=>`<tr><td><b>${esc(e.lote)}</b></td><td>${fmtDT(e.at)}</td><td>${e.n}</td><td>${e.itens?`<button class="s" data-mx="${esc(e.lote)}">Baixar</button>`:''}</td></tr>`).join('')}</tbody></table></div>`:''}`;
+  ${(()=>{const G={};(S.minhas||[]).forEach(x=>{(G[x.lote]=G[x.lote]||{lote:x.lote,at:x.at,n:0}).n++;});const g=Object.values(G);return g.length?`<h3>Envios feitos</h3><div class="tw"><table><thead><tr><th>Protocolo</th><th>Data</th><th>Propostas</th><th></th></tr></thead><tbody>${g.map(e=>`<tr><td><b>${esc(e.lote)}</b></td><td>${fmtDT(e.at)}</td><td>${e.n}</td><td><button class="s" data-mx="${esc(e.lote)}">Baixar</button></td></tr>`).join('')}</tbody></table></div>`:''})()}`;
 }
 async function enviarCesta(){
   const C=Cesta.get(),i=ident();
@@ -685,7 +697,7 @@ function contr(){
   <li><b>Realizado por outros fins:</b> a necessidade já foi atendida por outro meio (outro processo, outro DFD ou contrato vigente). Na justificativa, informe qual.</li>
   <li><b>Cancelar – não é mais necessário:</b> a demanda deixou de existir. Explique por quê.</li></ul>
   ${Store.canWrite?'':'<p class="sub"><b>Você pode revisar vários itens e enviar depois.</b> Cada escolha vira um rascunho nesta tela. Preencha a justificativa na própria linha e, ao terminar, envie tudo de uma vez pelo botão abaixo. Use o filtro de <b>Área</b> para revisar uma área por vez.</p>'}</details>
-  ${Store.canWrite?'':`<div class="box barra"><div><b>${cs.filter(c=>rascunho(c)).length} de ${cs.length}</b> itens revisados nesta lista<br><span class="sub">${C_.length} em rascunho${semJ?' · <span class="crit">'+semJ+' sem justificativa</span>':C_.length?' · todos com justificativa':''}. Nada é enviado até você clicar no botão ao lado.</span></div><button class="p" id="rv_env" ${C_.length?'':'disabled'}>Enviar revisão à coordenação (${C_.length})</button></div>`}
+  ${Store.canWrite?'':`<div class="box barra"><div><b>${cs.filter(c=>rascunho(c)).length} de ${cs.length}</b> itens revisados nesta lista<br><span class="sub">${C_.length} em rascunho${semJ?' · <span class="crit">'+semJ+' sem justificativa</span>':C_.length?' · todos com justificativa':''}. Nada é enviado até você clicar no botão ao lado.<br>${S.rascSt==='salvando'?'Guardando o rascunho no servidor…':S.rascSt==='erro'?'<span class="crit">Não consegui guardar o rascunho no servidor; ele continua neste navegador.</span>':'✓ Rascunho guardado no servidor, vinculado à sua conta.'}</span></div><button class="p" id="rv_env" ${C_.length?'':'disabled'}>Enviar revisão à coordenação (${C_.length})</button></div>`}
   <div class="row"><label class="sub">Área</label><select id="farea"><option value="">Todas as áreas</option>${[...new Set(allCsAll().map(c=>c.area).filter(Boolean))].sort().map(a=>`<option ${S.farea===a?'selected':''}>${esc(a)}</option>`).join('')}</select><input id="q" placeholder="Buscar DFD, título ou área" value="${esc(S.q)}"><label class="sub"><input type="checkbox" id="verrev" ${S.verRev?'checked':''}> Mostrar também os já revisados e aprovados</label><span class="sub">${cs.length} contratações</span></div><div class="tw"><table><tr><th>DFD</th><th>Título</th><th>Área</th><th>Prio.</th><th>Início</th><th>Conclusão</th><th>Valor</th><th>Revisão</th></tr>`;
   cs.slice(0,600).forEach(c=>{const o=(S.ov[c.id]||{}).f||{};const ed=Object.keys(o).length;
     h+=`<tr><td>${esc(o.num||c.num)}${ed?' <span class="tag ok">editado</span>':''}</td><td>${esc(o.titulo||c.titulo)}</td><td>${esc(c.area)}</td><td>${esc(c.prioridade)}</td><td>${esc(o.ini||c.ini)}</td><td>${esc(o.fim||c.fim)}</td><td>${brl(c.total)}</td><td>${destSel(c)}</td></tr>`;});
