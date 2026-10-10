@@ -455,7 +455,8 @@ async function enviarCesta(){
 async function validar(id,dec){
   if(!Store.canWrite){S.msg='Somente quem tem acesso de validação pode aprovar ou recusar.';draw();return;}
   const p=(S.prop||[]).find(x=>x.id===id);if(!p)return;
-  const j=await justificar((dec==='aprovada'?'Aprovar':'Recusar')+' proposta · '+p.ref,p.antes,p.depois,'Comentário da validação');
+  /* aprovar não exige justificativa; recusar continua exigindo o motivo */
+  const j=dec==='aprovada'?'Aprovada pela coordenação.':await justificar('Recusar proposta · '+p.ref,p.antes,p.depois,'Motivo da recusa');
   if(j===null)return;
   const aud={acao:'Validação: '+dec,cid:p.cid,ref:p.ref,antes:p.antes,depois:p.depois,just:j,prop:p.prop.nome+' · '+p.prop.setor,pjust:p.just};
   let ok;
