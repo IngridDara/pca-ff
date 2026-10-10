@@ -23,6 +23,9 @@ th{background:var(--ac2);color:var(--ac-d);position:sticky;top:0;white-space:now
 button.p,select,input,textarea{font:inherit;color:var(--tx);background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:6px 10px}
 button.p{background:var(--ac);color:#fff;border-color:var(--ac);cursor:pointer}button.p:hover{background:var(--ac-d)}button.s{cursor:pointer;font:inherit;color:var(--tx);background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:6px 10px}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.hb{background:rgba(255,255,255,.14);color:#fff;border:1px solid rgba(255,255,255,.45);border-radius:8px;padding:6px 12px;font:inherit;font-size:13px;cursor:pointer}.hb:hover{background:rgba(255,255,255,.25)}
+.agora{border-left:5px solid var(--ac);background:var(--ac2)}.agora h2{margin:2px 0 6px;font-size:20px}
+.tl{border-left:2px solid var(--bd);margin:10px 0 16px 8px;padding-left:18px}.tli{position:relative;padding:8px 0}.tli .dot{position:absolute;left:-26px;top:13px;width:14px;height:14px;border-radius:50%;background:var(--card);border:2px solid var(--bd)}.tli.enc .dot{background:var(--ac);border-color:var(--ac)}.tli.and .dot{border-color:var(--ac);box-shadow:0 0 0 4px var(--ac2)}.tli.sem,.tli.fut{opacity:.8}
 .bar{height:8px;border-radius:4px;background:var(--bd);overflow:hidden;min-width:80px}.bar i{display:block;height:100%;background:var(--ac)}
 .box{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:14px;margin-bottom:12px}
 .drop{border:2px dashed var(--bd);border-radius:10px;padding:22px;text-align:center;color:var(--mut)}
@@ -61,6 +64,8 @@ dialog label{display:block;margin:8px 0 2px;font-size:12px;color:var(--mut)}dial
         if(dec==='aprovado')b.set(uref('validadores',u.id),clean({nome:u.nome,setor:u.setor,email:u.email,por,at}));
         else b.delete(uref('validadores',u.id));
         b.update(uref('usuarios',u.id),{status:dec,por,decididoEm:at});await b.commit();},
+      async listCalendario(){const r=await F.getDocs(F.collection(db,'calendario'));const o={};r.docs.forEach(d=>o[d.id]=d.data().marcos||[]);return o;},
+      setCalendario:(ano,marcos)=>F.setDoc(F.doc(db,'calendario',ano),clean({marcos,at:new Date().toISOString()})),
       async listDecisoes(){const r=await F.getDocs(F.collection(db,'decisoes'));return r.docs.map(d=>d.data());},
       setDecisao:(id,o)=>F.setDoc(F.doc(db,'decisoes',id),clean(o)),
       addAudit:o=>F.addDoc(F.collection(db,'auditoria'),clean(o)),
@@ -339,6 +344,7 @@ const Store={
     const D=this.data;D.ajustes={...(j.ajustes||{})};D.ov={...(j.ov||{})};D.destino={...(j.destino||{})};D.vinc={...(j.vinc||{})};
     if(this.fb){try{(await this.fb.listDecisoes()).forEach(x=>{if(SLOT[x.t])D[SLOT[x.t]][x.k]=x.v;});}
       catch(e){S.msg='Não consegui ler as decisões do servidor ('+(e.code||e.message)+'). Exibindo a base inicial.';}}
+    if(this.fb){try{S.cal=await this.fb.listCalendario();}catch(e){}}
     this.sync();
   },
   /* grava uma decisão (só validador) + registro no histórico */
@@ -348,6 +354,11 @@ const Store={
     try{await this.fb.setDecisao(dk(d.t,d.k),{t:d.t,k:d.k,v:d.v,uid:this.me.email,at:new Date().toISOString()});
       await this.fb.addAudit({...aud,uid:this.me.email,at:new Date().toISOString()});return true;}
     catch(e){S.msg='Não foi possível salvar ('+(e.code||e.message)+').';await this.load();draw();return false;}
+  },
+  async salvarCalendario(ano,marcos,just){
+    try{await this.fb.setCalendario(String(ano),marcos);(S.cal=S.cal||{})[ano]=marcos;
+      await this.fb.addAudit({acao:'Calendário do PCA',cid:'',ref:'PCA '+ano,antes:'',depois:marcos.map(m=>m.nome+' ('+(m.ini||'?')+' a '+(m.fim||'?')+')').join('; '),just,uid:this.me.email,at:new Date().toISOString()});return true;}
+    catch(e){S.msg='Não foi possível salvar o calendário ('+(e.code||e.message)+').';return false;}
   },
   async auditar(aud){try{await this.fb.addAudit({...aud,uid:this.me.email,at:new Date().toISOString()});return true;}catch(e){S.msg='Não foi possível registrar no histórico ('+(e.code||e.message)+').';draw();return false;}}
 };
@@ -477,29 +488,90 @@ function sevTag(s){return `<span class="tag ${s}">${{crit:'Crítico',med:'Médio
 const ovF=()=>{const o={};Object.keys(S.ov).forEach(k=>{const f={...(S.ov[k].f||{})};delete f.num;o[k]=f;});return o;};
 const DEST={'':'A definir',manter:'Manter no ano',proximo:'Enviar ao PCA seguinte',cancelar:'Cancelar'};
 const yrs=()=>S.ano==='todos'?[2026,2027].filter(a=>S.ds[a]):(S.ds[S.ano]?[S.ano]:[]);
-const allVals=()=>yrs().flatMap(a=>S.val[a]||[]);
-const allCs=()=>yrs().flatMap(a=>S.ds[a].cs);
+const allCsAll=()=>yrs().flatMap(a=>S.ds[a].cs);
+const allCs=()=>allCsAll().filter(c=>!S.farea||c.area===S.farea);
+const allVals=()=>{const ok=new Set(allCs().map(c=>c.id));return yrs().flatMap(a=>S.val[a]||[]).filter(v=>ok.has(v.cid));};
 const destOf=c=>(S.dest[c.id]||{}).d||'';
 function destSel(c){return `<select data-dest="${esc(c.id)}">${Object.keys(DEST).map(k=>`<option value="${k}" ${destOf(c)==k?'selected':''}>${k=='manter'?'Manter em '+c.ano:k=='proximo'?'Enviar ao PCA '+(c.ano+1):DEST[k]}</option>`).join('')}</select>`}
 async function setDest(c,d){const x={d,uid:who(),at:new Date().toISOString()};await registrar('Destino do item',c.id,c.num,DEST[destOf(c)]||'A definir',DEST[d]||d,{t:'dest',cid:c.id,v:d});}
 function fmtDT(s){if(!s)return '—';const d=new Date(s);return isNaN(d)?s:d.toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'});}
+const VIS=[['contr','Contratações'],['pend','Pendências'],['a26','Análise 2026 (PCA × contratado)'],['cruz','Cruzamento 2026×2027'],['pncp','Situação no PNCP'],['painel','Resumo por regra e área']];
+const MARCOS_PADRAO=[['Envio dos DFDs pelas áreas','Áreas requisitantes'],['Validação e adequação pelo NGI','NGI'],['Consolidação do PCA','NCP'],['Aprovação pela Diretoria Executiva','Diretoria Executiva'],['Publicação no PNCP','NCP'],['Revisões e ajustes durante a execução','NGI / NCP']].map((m,i)=>({id:'m'+(i+1),nome:m[0],resp:m[1],ini:'',fim:'',desc:''}));
+const marcosDe=ano=>((S.cal||{})[ano]&&(S.cal||{})[ano].length)?S.cal[ano]:MARCOS_PADRAO;
+const dia=v=>v?new Date(v+'T00:00:00'):null;
+const fmtD=v=>v?dia(v).toLocaleDateString('pt-BR'):'—';
+function statusMarco(m){
+  if(!m.ini&&!m.fim)return {k:'sem',t:'Sem data',c:''};
+  const h=new Date();h.setHours(0,0,0,0);const a=dia(m.ini),b=dia(m.fim);
+  if(b&&b<h)return {k:'enc',t:'Encerrado',c:'ok'};
+  if(a&&a>h)return {k:'fut',t:'Em breve',c:''};
+  const r=b?Math.round((b-h)/864e5):null;
+  return {k:'and',t:'Em andamento',c:'med',r};
+}
+function calend(){
+  const ano=S.ano==='todos'?2026:S.ano,M=marcosDe(ano),st=M.map(statusMarco),atual=M.findIndex((m,i)=>st[i].k==='and');
+  const d=S.ds[ano],v=S.val[ano]||[];
+  let h='';
+  if(atual>=0){const m=M[atual],r=st[atual].r;h+=`<div class="box agora"><span class="sub">Agora</span><h2>${esc(m.nome)}</h2><div>${r==null?'':r<0?'':r===0?'<b>Termina hoje.</b> ':'Faltam <b>'+r+' dia(s)</b> · '}até ${fmtD(m.fim)} · responsável: ${esc(m.resp||'—')}</div>${m.desc?'<div class="sub">'+esc(m.desc)+'</div>':''}</div>`;}
+  else if(M.every((m,i)=>st[i].k==='sem'))h+=`<div class="box agora"><span class="sub">Calendário do PCA ${ano}</span><h2>Datas ainda não definidas</h2><div class="sub">${Store.me&&Store.me.admin?'Clique em "Editar calendário" para informar início e fim de cada etapa.':'A coordenação do NGI ainda vai divulgar as datas de cada etapa.'}</div></div>`;
+  h+=`<div class="row"><h3 style="margin:0">Etapas do PCA ${ano}</h3>${Store.me&&Store.me.admin?'<button class="s" id="cal_ed">Editar calendário</button>':''}</div><div class="tl">${M.map((m,i)=>`<div class="tli ${st[i].k}"><div class="dot"></div><div><b>${i+1}. ${esc(m.nome)}</b> <span class="tag ${st[i].c}">${st[i].t}</span><br><span class="sub">${m.ini||m.fim?fmtD(m.ini)+' a '+fmtD(m.fim)+' · ':''}${esc(m.resp||'')}</span>${m.desc?'<br><span class="sub">'+esc(m.desc)+'</span>':''}</div></div>`).join('')}</div>`;
+  if(d){
+    const comPend=new Set(v.filter(a=>stOf(a)==='pendente').map(a=>a.cid)),crit=new Set(v.filter(a=>a.sev==='crit'&&stOf(a)==='pendente').map(a=>a.cid));
+    const semDest=d.cs.filter(c=>destOf(c)==='').length,propP=(S.prop||[]).filter(p=>p.status==='pendente').length;
+    h+=`<div class="cards" style="margin-top:14px"><div class="c"><b>${d.cs.length}</b><span>contratações no PCA ${ano}</span></div><div class="c"><b>R$ ${(d.cs.reduce((t,c)=>t+c.total,0)/1e6).toLocaleString('pt-BR',{maximumFractionDigits:1})} mi</b><span>valor estimado</span></div><div class="c"><b class="crit">${crit.size}</b><span>com pendência crítica</span></div><div class="c"><b>${comPend.size}</b><span>com alguma pendência</span></div><div class="c"><b>${semDest}</b><span>sem destino definido</span></div>${Store.canWrite?`<div class="c"><b>${propP}</b><span>propostas aguardando</span></div>`:''}</div>`;
+    const ar={};d.cs.forEach(c=>{const k=c.area||'(sem área)';const x=ar[k]||(ar[k]={n:0,p:0,cr:0,sd:0,t:0});x.n++;x.t+=c.total;if(comPend.has(c.id))x.p++;if(crit.has(c.id))x.cr++;if(destOf(c)==='')x.sd++;});
+    h+=`<h3>O que falta por área</h3><div class="tw"><table><thead><tr><th>Área requisitante</th><th>Contratações</th><th>Com pendência</th><th>Críticas</th><th>Sem destino</th><th></th></tr></thead><tbody>${Object.entries(ar).sort((a,b)=>b[1].p-a[1].p||b[1].t-a[1].t).map(([k,x])=>`<tr><td>${esc(k)}</td><td>${x.n}</td><td>${x.p?'<b>'+x.p+'</b>':'<span class="ok">0 ✓</span>'}</td><td>${x.cr||'0'}</td><td>${x.sd}</td><td><button class="s" data-go="${esc(k)}">Ver itens</button></td></tr>`).join('')}</tbody></table></div>`;
+  }
+  return h;
+}
+function editCal(){
+  const ano=S.ano==='todos'?2026:S.ano;let M=marcosDe(ano).map(m=>({...m}));const dlg=$('#dlg');
+  const render=()=>{dlg.innerHTML=`<h3>Calendário do PCA ${ano}</h3><p class="sub">Informe início e fim de cada etapa. Etapas sem data aparecem como "Sem data".</p>
+  ${M.map((m,i)=>`<div class="box" style="padding:10px"><input data-m="${i}|nome" value="${esc(m.nome)}" style="width:100%;font-weight:600" placeholder="Nome da etapa"><div class="row" style="margin-top:6px"><label class="sub">Início <input type="date" data-m="${i}|ini" value="${esc(m.ini)}"></label><label class="sub">Fim <input type="date" data-m="${i}|fim" value="${esc(m.fim)}"></label><input data-m="${i}|resp" value="${esc(m.resp||'')}" placeholder="Responsável"><button class="s" data-mr="${i}">Remover</button></div><input data-m="${i}|desc" value="${esc(m.desc||'')}" style="width:100%" placeholder="Observação (opcional)"></div>`).join('')}
+  <div class="row"><button class="s" id="m_add">+ Adicionar etapa</button></div><div class="sub" id="m_err" style="color:var(--crit)"></div><div class="row" style="margin-top:12px"><button class="p" id="m_ok">Salvar calendário</button><button class="s" id="m_no">Cancelar</button></div>`;
+    dlg.querySelectorAll('[data-m]').forEach(e=>e.onchange=()=>{const [i,k]=e.dataset.m.split('|');M[+i][k]=e.value;});
+    dlg.querySelectorAll('[data-mr]').forEach(b=>b.onclick=()=>{M.splice(+b.dataset.mr,1);render();});
+    $('#m_add').onclick=()=>{M.push({id:'m'+Date.now(),nome:'Nova etapa',resp:'',ini:'',fim:'',desc:''});render();};
+    $('#m_no').onclick=()=>dlg.close();
+    $('#m_ok').onclick=async()=>{
+      if(M.some(m=>!m.nome.trim())){$('#m_err').textContent='Toda etapa precisa de um nome.';return;}
+      if(M.some(m=>m.ini&&m.fim&&m.fim<m.ini)){$('#m_err').textContent='Há etapa com fim antes do início.';return;}
+      dlg.close();const j=await justificar('Calendário do PCA '+ano,undefined,undefined,'Motivo da alteração do calendário');if(j===null)return;
+      await Store.salvarCalendario(ano,M,j);draw();};
+  };
+  render();dlg.showModal();
+}
+function itens(){
+  const vis=S.vis||'contr',areas=[...new Set(allCsAll().map(c=>c.area).filter(Boolean))].sort();
+  return `<div class="row"><label class="sub">Visão</label><select id="vis">${VIS.map(o=>`<option value="${o[0]}" ${vis===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select>
+  ${['contr','pend','painel'].includes(vis)?`<label class="sub">Área</label><select id="farea"><option value="">Todas as áreas</option>${areas.map(a=>`<option ${S.farea===a?'selected':''}>${esc(a)}</option>`).join('')}</select>`:''}</div>`+({contr,pend,a26,cruz,pncp,painel}[vis])();
+}
+function coord(){
+  const sub=S.csub||'prop',pp=(S.prop||[]).filter(p=>p.status==='pendente').length,cp=(Store.usuarios||[]).filter(u=>u.status==='pendente').length;
+  const subs=[['prop','Propostas'+(pp?' ('+pp+')':'')]].concat(Store.me&&Store.me.admin?[['cad','Cadastros'+(cp?' ('+cp+')':'')]]:[],[['hist','Histórico'],['dados','Exportar e importar']]);
+  const cur_=subs.some(x=>x[0]===sub)?sub:'prop';
+  return `<div class="row">${subs.map(x=>`<button class="${cur_===x[0]?'p':'s'}" data-cs="${x[0]}">${x[1]}</button>`).join('')}</div>`+({prop,cad,hist,dados}[cur_])();
+}
 function draw(){
-  const d=cur(),v=vals();
-  const tabs=[['painel','Painel'],['pend','Pendências'],['contr','Contratações'],['cruz','Cruzamento 2026×2027'],['pncp','Situação no PNCP'],['a26','Análise 2026']].concat(Store.canWrite?[['prop','Propostas'+((S.prop||[]).filter(p=>p.status==='pendente').length?' ('+(S.prop||[]).filter(p=>p.status==='pendente').length+')':'')]]:[['minhas','Minhas propostas'+(Cesta.get().length?' ('+Cesta.get().length+')':'')]],[['dados','Importar / Exportar']],Store.canWrite?[['hist','Histórico']]:[],Store.me&&Store.me.admin?[['cad','Cadastros'+((Store.usuarios||[]).filter(u=>u.status==='pendente').length?' ('+(Store.usuarios||[]).filter(u=>u.status==='pendente').length+')':'')]]:[],[['cfg','Configurações']]);
-  if(!tabs.some(t=>t[0]===S.tab))S.tab='painel';
-  if(S.ano==='todos'&&!['pend','contr','pncp'].includes(S.tab))S.ano=2026;
+  const nc=Cesta.get().length;
+  const pp=(S.prop||[]).filter(p=>p.status==='pendente').length+((Store.usuarios||[]).filter(u=>u.status==='pendente').length);
+  const tabs=[['cal','Calendário'],['itens','Itens do PCA']].concat(Store.canWrite?[['coord','Coordenação'+(pp?' ('+pp+')':'')]]:[]);
+  if(!['cal','itens','coord','minhas','cfg'].includes(S.tab)||(S.tab==='coord'&&!Store.canWrite))S.tab='cal';
+  S.vis=S.vis||'contr';
+  if(S.ano==='todos'&&!(S.tab==='itens'&&['pend','contr','pncp'].includes(S.vis)))S.ano=2026;
   const age=S.pn&&S.pn.coletado?(Date.now()-new Date(S.pn.coletado))/864e5:null;
-  let h=`<header><div><h1>Validação e adequação do PCA</h1><div class="sub">Fundação Florestal · NGI coordena, NCP consolida</div></div>
-  <div class="row"><label class="sub">PCA</label><select id="ano">${[2026,2027].map(a=>`<option ${a==S.ano?'selected':''}>${a}</option>`).join('')}${['pend','contr','pncp'].includes(S.tab)?`<option value="todos" ${S.ano==='todos'?'selected':''}>Todos</option>`:''}</select></div></header>
-  <div class="msg ${age!=null&&age>10?'warn':''}"><b>Última atualização do PNCP:</b> ${S.pn?fmtDT(S.pn.coletado):'ainda não carregado'}${S.pn?` · fonte: coleta automática no GitHub`:''}${age!=null&&age>10?' · <b>desatualizado há '+Math.floor(age)+' dias: verifique a aba Actions do GitHub</b>':''} <button class="s" id="rl">Recarregar</button><br><span class="sub">Arquivo do PCA 2026: ${fmtDT((S.meta||{}).pca2026)} · PCA 2027: ${fmtDT((S.meta||{}).pca2027)}${Store.canWrite?' · <b>coordenação: '+esc(who())+'</b>':' · suas alterações viram propostas'}</span>${S.pnMsg?'<br><span class="sub">'+esc(S.pnMsg)+'</span>':''}</div>`;
+  let h=`<header><div><h1>Plano de Contratações Anual</h1><div class="sub">Fundação Florestal · NGI coordena, NCP consolida</div></div>
+  <div class="row"><label class="sub">PCA</label><select id="ano">${[2026,2027].map(a=>`<option ${a==S.ano?'selected':''}>${a}</option>`).join('')}${S.tab==='itens'&&['pend','contr','pncp'].includes(S.vis)?`<option value="todos" ${S.ano==='todos'?'selected':''}>Todos</option>`:''}</select>
+  ${Store.canWrite?'':`<button class="hb" data-t="minhas">Minhas propostas${nc?' ('+nc+')':''}</button>`}<button class="hb" data-t="cfg">${Store.me?esc((Store.me.name||'').split(' ')[0]||'Conta'):'Entrar'}</button></div></header>`;
+  h+=`<div class="sub" style="margin:-4px 2px 10px">PNCP atualizado em ${S.pn?fmtDT(S.pn.coletado):'—'}${age!=null&&age>10?' · <b class="crit">desatualizado há '+Math.floor(age)+' dias</b>':''} <button class="s" id="rl">Recarregar</button>${Store.canWrite?'':' · suas alterações viram propostas para validação'}${S.pnMsg?' · '+esc(S.pnMsg):''}</div>`;
   if(S.msg)h+=`<div class="msg">${esc(S.msg)}</div>`;
   h+=`<nav>${tabs.map(t=>`<button data-t="${t[0]}" class="${S.tab==t[0]?'on':''}">${t[1]}</button>`).join('')}</nav>`;
-  if(!yrs().length&&S.tab!='dados'&&S.tab!='cfg'&&S.tab!='minhas'&&S.tab!='cad')h+=`<div class="box">PCA ${S.ano} ainda não está no repositório. Envie <code>pca_${S.ano}.csv</code> ao repositório e rode a rotina em Actions (ou espere a próxima execução).</div>`;
-  else h+=({painel,pend,contr,cruz,pncp,a26,prop,minhas,dados,hist,cad,cfg}[S.tab])();
+  if((S.tab==='cal'||S.tab==='itens')&&!yrs().length)h+=`<div class="box">PCA ${S.ano} ainda não está no repositório. Envie <code>pca_${S.ano}.csv</code> ao repositório e rode a rotina em Actions (ou espere a próxima execução).</div>`;
+  else h+=({cal:calend,itens,coord,minhas,cfg}[S.tab])();
   $('#app').innerHTML=h;
   $('#ano').onchange=e=>{S.ano=e.target.value==='todos'?'todos':+e.target.value;draw();};
-  document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{S.tab=b.dataset.t;draw();});
-  const rl=$('#rl');if(rl)rl.onclick=async()=>{S.pnMsg='Recarregando…';draw();await Store.load();await loadPNCP();await loadPCAFolder();draw();};
+  document.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{S.tab=b.dataset.t;window.scrollTo(0,0);draw();});
+  const rl=$('#rl');if(rl)rl.onclick=async()=>{S.pnMsg='Recarregando…';draw();await Store.load();await loadPNCP();await loadPCAFolder();S.pnMsg='';draw();};
   bind();
 }
 function painel(){
@@ -671,6 +743,10 @@ function bind(){
   document.querySelectorAll('[data-pv]').forEach(b=>b.onclick=()=>{const [i,d]=b.dataset.pv.split('|');validar(i,d);});
   const px=$('#px');if(px)px.onclick=()=>{const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';const c=['Protocolo','Recebida em','PCA','DFD','Título','Área','Proponente','Setor','E-mail','Ação','De','Para','Justificativa do proponente','Situação','Validado por','Data da validação','Comentário da validação'];save('propostas_pca.csv','\ufeff'+[c.join(';')].concat((S.prop||[]).map(p=>[p.lote,p.at,p.ano,p.ref,p.titulo,p.area,p.prop.nome,p.prop.setor,p.prop.email,p.acao,p.antes,p.depois,p.just,p.status,(p.val||{}).uid,(p.val||{}).at,(p.val||{}).coment].map(q).join(';'))).join('\n'));};
   document.querySelectorAll('[data-fm]').forEach(e=>e.oninput=()=>{(S.fm=S.fm||{})[e.dataset.fm]=e.value;});
+  const vs=$('#vis');if(vs)vs.onchange=()=>{S.vis=vs.value;draw();};const fa=$('#farea');if(fa)fa.onchange=()=>{S.farea=fa.value;draw();};
+  document.querySelectorAll('[data-cs]').forEach(b=>b.onclick=()=>{S.csub=b.dataset.cs;draw();});
+  document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{S.farea=b.dataset.go;S.vis='contr';S.tab='itens';window.scrollTo(0,0);draw();});
+  const ce=$('#cal_ed');if(ce)ce.onclick=editCal;
   document.querySelectorAll('[data-modo]').forEach(b=>b.onclick=()=>{S.cfgModo=b.dataset.modo;S.msg='';draw();});
   const F_=()=>S.fm||{};
   const ci=$('#c_in');if(ci)ci.onclick=()=>Store.login((F_().fm_email||'').trim(),F_().fm_senha||'');
