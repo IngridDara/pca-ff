@@ -14,7 +14,7 @@ nav button{background:none;border:0;padding:9px 12px;color:var(--mut);cursor:poi
 nav button:hover{color:var(--ac)}nav button.on{color:var(--ac-d);border-color:var(--sol);border-bottom-width:3px;font-weight:600}
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px}
 .c{background:var(--card);border:1px solid var(--bd);border-top:3px solid var(--ac);border-radius:10px;padding:12px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
-.c b{display:block;font-size:18px;white-space:nowrap}.c span{color:var(--mut);font-size:12px}
+.cards.big{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}.cards.big .c{padding:16px}.cards.big .c b{font-size:30px}.c b{display:block;font-size:18px;white-space:nowrap}.c span{color:var(--mut);font-size:12px}
 .tw{overflow-x:auto;background:var(--card);border:1px solid var(--bd);border-radius:10px}
 table{border-collapse:collapse;width:100%;font-size:13px}th,td{padding:7px 9px;border-bottom:1px solid var(--bd);text-align:left;vertical-align:top}
 th{background:var(--ac2);color:var(--ac-d);position:sticky;top:0;white-space:nowrap}tbody tr:hover td{background:#f4f7ef}
@@ -23,6 +23,9 @@ th{background:var(--ac2);color:var(--ac-d);position:sticky;top:0;white-space:now
 button.p,select,input,textarea{font:inherit;color:var(--tx);background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:6px 10px}
 button.p{background:var(--ac);color:#fff;border-color:var(--ac);cursor:pointer}button.p:hover{background:var(--ac-d)}button.s{cursor:pointer;font:inherit;color:var(--tx);background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:6px 10px}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.rasc{border-color:var(--ac);background:var(--ac2)}input.falta,textarea.falta{border-color:var(--crit);background:#fdecea}td input[data-rj]{display:block;margin-top:4px;width:100%;min-width:190px;font-size:12px}
+.guia summary{cursor:pointer}.guia-l{margin:6px 0 4px;padding-left:20px}.guia-l li{margin-bottom:4px}
+.barra{display:flex;gap:12px;flex-wrap:wrap;align-items:center;background:var(--ac2);position:sticky;top:0;z-index:5}
 .hb{background:rgba(255,255,255,.14);color:#fff;border:1px solid rgba(255,255,255,.45);border-radius:8px;padding:6px 12px;font:inherit;font-size:13px;cursor:pointer}.hb:hover{background:rgba(255,255,255,.25)}
 .agora{border-left:5px solid var(--ac);background:var(--ac2)}.agora h2{margin:2px 0 6px;font-size:20px}
 .tl{border-left:2px solid var(--bd);margin:10px 0 16px 8px;padding-left:18px}.tli{position:relative;padding:8px 0}.tli .dot{position:absolute;left:-26px;top:13px;width:14px;height:14px;border-radius:50%;background:var(--card);border:2px solid var(--bd)}.tli.enc .dot{background:var(--ac);border-color:var(--ac)}.tli.and .dot{border-color:var(--ac);box-shadow:0 0 0 4px var(--ac2)}.tli.sem,.tli.fut{opacity:.8}
@@ -412,24 +415,35 @@ function proporAlteracao(base){
       S.msg='Proposta adicionada (' + c.length + ' na cesta). Quando terminar, abra "Minhas propostas" e envie todas à coordenação.';fim(true);draw();};
   });
 }
+function xMinhas(lote){
+  const i=ident(),q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+  const L=[];
+  Envios.get().filter(e=>!lote||e.lote===lote).slice().reverse().forEach(e=>(e.itens||[]).forEach(x=>L.push(['Enviada',e.lote,fmtDT(e.at),x.ano,x.ref,x.titulo,x.area,x.acao,x.antes,x.depois,x.just])));
+  if(!lote)Cesta.get().forEach(x=>L.push(['Rascunho (não enviada)','',fmtDT(x.at),x.ano,x.ref,x.titulo,x.area,x.acao,x.antes,x.depois,x.just]));
+  if(!L.length){S.msg='Ainda não há alterações para baixar.';draw();return;}
+  const c=['Situação','Protocolo','Data','PCA','DFD','Título','Área','Tipo de alteração','De','Para','Justificativa','Proponente','Setor','E-mail'];
+  save('minhas_alteracoes_pca'+(lote?'_'+lote:'')+'.csv','\ufeff'+[c.join(';')].concat(L.map(r=>r.concat([i.nome,i.setor,i.email]).map(q).join(';'))).join('\n'));
+}
 function minhas(){
   const C=Cesta.get(),i=ident(),E=Envios.get();
   return `<div class="box"><b>Quem está propondo</b><p class="sub">Você se identifica uma única vez; os dados ficam salvos neste navegador.</p>
   <div class="row"><input id="mi_n" placeholder="Nome" value="${esc(i.nome)}"><input id="mi_s" placeholder="Setor" value="${esc(i.setor)}"><input id="mi_e" placeholder="E-mail institucional" value="${esc(i.email)}" style="min-width:240px"></div></div>
-  <div class="tw"><table><thead><tr><th>Item</th><th>O que muda</th><th>Justificativa</th><th></th></tr></thead><tbody>${C.map(p=>`<tr><td><b>${esc(p.ref)}</b><br><span class="sub">${esc(p.titulo)}</span></td><td><span class="sub">${esc(p.acao)}</span><br>De: ${esc(p.antes||'—')}<br><b>Para: ${esc(p.depois||'—')}</b></td><td>${esc(p.just)}</td><td><button class="s" data-rm="${p.id}">Remover</button></td></tr>`).join('')||'<tr><td colspan="4" class="sub">Nenhuma proposta na cesta. Faça alterações nas demais abas: elas ficam aqui até você enviar.</td></tr>'}</tbody></table></div>
-  <div class="row" style="margin-top:12px"><button class="p" id="mi_env" ${C.length?'':'disabled'}>Enviar todas à coordenação (${C.length})</button></div>
-  ${E.length?`<h3>Já enviadas</h3><div class="tw"><table><thead><tr><th>Protocolo</th><th>Data</th><th>Propostas</th></tr></thead><tbody>${E.map(e=>`<tr><td><b>${esc(e.lote)}</b></td><td>${fmtDT(e.at)}</td><td>${e.n}</td></tr>`).join('')}</tbody></table></div>`:''}`;
+  <div class="tw"><table><thead><tr><th>Item</th><th>O que muda</th><th>Justificativa</th><th></th></tr></thead><tbody>${C.map(p=>`<tr><td><b>${esc(p.ref)}</b><br><span class="sub">${esc(p.titulo)}</span></td><td><span class="sub">${esc(p.acao)}</span><br>De: ${esc(p.antes||'—')}<br><b>Para: ${esc(p.depois||'—')}</b></td><td><textarea data-mj="${p.id}" rows="2" class="${(p.just||'').length>=JUST_MIN?'':'falta'}" placeholder="Justificativa (obrigatória, mínimo ${JUST_MIN} caracteres)" style="width:100%;min-width:200px">${esc(p.just||'')}</textarea></td><td><button class="s" data-rm="${p.id}">Remover</button></td></tr>`).join('')||'<tr><td colspan="4" class="sub">Nenhuma proposta na cesta. Faça revisões na aba Itens do PCA: elas ficam aqui até você enviar.</td></tr>'}</tbody></table></div>
+  <div class="row" style="margin-top:12px"><button class="p" id="mi_env" ${C.length?'':'disabled'}>Enviar todas à coordenação (${C.length})</button><button class="s" id="mi_x">Baixar tabela das minhas alterações</button></div>
+  ${E.length?`<h3>Já enviadas</h3><div class="tw"><table><thead><tr><th>Protocolo</th><th>Data</th><th>Propostas</th><th></th></tr></thead><tbody>${E.map(e=>`<tr><td><b>${esc(e.lote)}</b></td><td>${fmtDT(e.at)}</td><td>${e.n}</td><td>${e.itens?`<button class="s" data-mx="${esc(e.lote)}">Baixar</button>`:''}</td></tr>`).join('')}</tbody></table></div>`:''}`;
 }
 async function enviarCesta(){
   const C=Cesta.get(),i=ident();
   if(!C.length)return;
   if(!identOk(i)){S.msg='Preencha nome, setor e e-mail institucional (sp.gov.br) antes de enviar.';draw();return;}
+  const sj=C.filter(x=>(x.just||'').length<JUST_MIN);
+  if(sj.length){S.msg=sj.length+' proposta(s) sem justificativa (mínimo '+JUST_MIN+' caracteres). Preencha na coluna Justificativa antes de enviar.';draw();return;}
   if(!Store.fb){S.msg='Sem conexão com o servidor: suas propostas continuam guardadas aqui. Tente novamente em instantes.';draw();return;}
   const lote='PCA-'+new Date().toISOString().slice(0,10).replace(/-/g,'')+'-'+rid().slice(0,5).toUpperCase();
   const itens=C.map(p=>({nome:i.nome,setor:i.setor,email:i.email,acao:String(p.acao),cid:String(p.cid),ref:String(p.ref),ano:String(p.ano||''),titulo:String(p.titulo||''),area:String(p.area||''),antes:String(p.antes||''),depois:String(p.depois||''),just:p.just,ap:p.ap}));
   S.msg='Enviando…';draw();
-  try{await Store.fb.enviar(lote,itens);Cesta.set([]);Envios.add({lote,at:new Date().toISOString(),n:itens.length});
-    S.msg='Enviado! Protocolo '+lote+' ('+itens.length+' proposta(s)). A coordenação já as recebe no painel.';}
+  try{await Store.fb.enviar(lote,itens);Cesta.set([]);Envios.add({lote,at:new Date().toISOString(),n:itens.length,itens:itens.map(x=>({ref:x.ref,titulo:x.titulo,area:x.area,acao:x.acao,antes:x.antes,depois:x.depois,just:x.just,ano:x.ano}))});
+    S.msg='Enviado! Protocolo '+lote+' ('+itens.length+' proposta(s)). A coordenação já as recebe no painel. Baixe a tabela das suas alterações em "Minhas propostas".';}
   catch(e){S.msg='Não foi possível enviar ('+(e.code||e.message)+'). Suas propostas continuam guardadas; tente de novo.';}
   draw();
 }
@@ -486,16 +500,25 @@ async function saveOv(cid,f){
 }
 function sevTag(s){return `<span class="tag ${s}">${{crit:'Crítico',med:'Médio',baixa:'Baixo'}[s]}</span>`}
 const ovF=()=>{const o={};Object.keys(S.ov).forEach(k=>{const f={...(S.ov[k].f||{})};delete f.num;o[k]=f;});return o;};
-const DEST={'':'A definir',manter:'Manter no ano',proximo:'Enviar ao PCA seguinte',cancelar:'Cancelar'};
+const DEST={'':'A definir',manter:'Manter no PCA',proximo:'Atualizar para o PCA seguinte',cancelar:'Cancelar – não é mais necessário',outros:'Realizado por outros fins'};
+const dLabel=(k,ano)=>k==='manter'&&ano?'Manter no PCA '+ano:k==='proximo'&&ano?'Atualizar para PCA '+(ano+1):(DEST[k]||k);
 const yrs=()=>S.ano==='todos'?[2026,2027].filter(a=>S.ds[a]):(S.ds[S.ano]?[S.ano]:[]);
 const allCsAll=()=>yrs().flatMap(a=>S.ds[a].cs);
 const allCs=()=>allCsAll().filter(c=>!S.farea||c.area===S.farea);
 const allVals=()=>{const ok=new Set(allCs().map(c=>c.id));return yrs().flatMap(a=>S.val[a]||[]).filter(v=>ok.has(v.cid));};
 const destOf=c=>(S.dest[c.id]||{}).d||'';
-function destSel(c){return `<select data-dest="${esc(c.id)}">${Object.keys(DEST).map(k=>`<option value="${k}" ${destOf(c)==k?'selected':''}>${k=='manter'?'Manter em '+c.ano:k=='proximo'?'Enviar ao PCA '+(c.ano+1):DEST[k]}</option>`).join('')}</select>`}
-async function setDest(c,d){const x={d,uid:who(),at:new Date().toISOString()};await registrar('Revisão do item',c.id,c.num,DEST[destOf(c)]||'A definir',DEST[d]||d,{t:'dest',cid:c.id,v:d});}
+const rascunho=c=>Cesta.get().find(x=>x.ch==='dest|'+c.id);
+function destSel(c){const r=rascunho(c),v=r?r.ap.v:destOf(c);return `<select data-dest="${esc(c.id)}"${r?' class="rasc"':''}>${Object.keys(DEST).map(k=>`<option value="${k}" ${v==k?'selected':''}>${dLabel(k,c.ano)}</option>`).join('')}</select>${r?`<input data-rj="${esc(c.id)}" class="${(r.just||'').length>=JUST_MIN?'':'falta'}" placeholder="Justificativa (obrigatória)" value="${esc(r.just||'')}"><span class="sub">rascunho: ainda não enviado</span>`:''}`}
+async function setDest(c,d){
+  if(Store.canWrite)return registrar('Revisão do item',c.id,c.num,dLabel(destOf(c),c.ano)||'A definir',dLabel(d,c.ano),{t:'dest',cid:c.id,v:d});
+  /* quem propõe: revisa vários itens, sem janela; a justificativa é preenchida na própria linha e tudo é enviado depois */
+  const ch='dest|'+c.id,C=Cesta.get(),ant=C.find(x=>x.ch===ch);
+  let N=C.filter(x=>x.ch!==ch);
+  if(d!==destOf(c))N.push({id:ant?ant.id:rid(),ch,at:new Date().toISOString(),acao:'Revisão do item',cid:c.id,ref:c.num,ano:c.ano||'',titulo:c.titulo||'',area:c.area||'',antes:dLabel(destOf(c),c.ano)||'A definir',depois:dLabel(d,c.ano),just:ant?ant.just:'',ap:{t:'dest',cid:c.id,v:d}});
+  Cesta.set(N);draw();
+}
 function fmtDT(s){if(!s)return '—';const d=new Date(s);return isNaN(d)?s:d.toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'});}
-const VIS=[['contr','Contratações'],['pend','Pendências'],['a26','Análise 2026 (PCA × contratado)'],['cruz','Cruzamento 2026×2027'],['pncp','Situação no PNCP'],['painel','Resumo por regra e área']];
+const GV=[['a26','Contratação (PCA × contratado)'],['sempca','Contratos sem PCA'],['pend','Pendências'],['painel','Resumo por regra e área'],['cruz','Cruzamento 2026×2027'],['pncp','Situação no PNCP']];
 const MARCOS_PADRAO=[['Envio dos DFDs pelas áreas','Áreas requisitantes'],['Validação e adequação pelo NGI','NGI'],['Consolidação do PCA','NCP'],['Aprovação pela Diretoria Executiva','Diretoria Executiva'],['Publicação no PNCP','NCP'],['Revisões e ajustes durante a execução','NGI / NCP']].map((m,i)=>({id:'m'+(i+1),nome:m[0],resp:m[1],ini:'',fim:'',desc:''}));
 const marcosDe=ano=>((S.cal||{})[ano]&&(S.cal||{})[ano].length)?S.cal[ano]:MARCOS_PADRAO;
 const dia=v=>v?new Date(v+'T00:00:00'):null;
@@ -511,18 +534,23 @@ function statusMarco(m){
 function calend(){
   const ano=S.ano==='todos'?2026:S.ano,M=marcosDe(ano),st=M.map(statusMarco),atual=M.findIndex((m,i)=>st[i].k==='and');
   const d=S.ds[ano],v=S.val[ano]||[];
-  let h='';
+  let h='',big_='';
+  if(d){const comPend0=0;}
   if(atual>=0){const m=M[atual],r=st[atual].r;h+=`<div class="box agora"><span class="sub">Agora</span><h2>${esc(m.nome)}</h2><div>${r==null?'':r<0?'':r===0?'<b>Termina hoje.</b> ':'Faltam <b>'+r+' dia(s)</b> · '}até ${fmtD(m.fim)} · responsável: ${esc(m.resp||'—')}</div>${m.desc?'<div class="sub">'+esc(m.desc)+'</div>':''}</div>`;}
   else if(M.every((m,i)=>st[i].k==='sem'))h+=`<div class="box agora"><span class="sub">Calendário do PCA ${ano}</span><h2>Datas ainda não definidas</h2><div class="sub">${Store.me&&Store.me.admin?'Clique em "Editar calendário" para informar início e fim de cada etapa.':'A coordenação do NGI ainda vai divulgar as datas de cada etapa.'}</div></div>`;
   h+=`<div class="row"><h3 style="margin:0">Etapas do PCA ${ano}</h3>${Store.me&&Store.me.admin?'<button class="s" id="cal_ed">Editar calendário</button>':''}</div><div class="tl">${M.map((m,i)=>`<div class="tli ${st[i].k}"><div class="dot"></div><div><b>${i+1}. ${esc(m.nome)}</b> <span class="tag ${st[i].c}">${st[i].t}</span><br><span class="sub">${m.ini||m.fim?fmtD(m.ini)+' a '+fmtD(m.fim)+' · ':''}${esc(m.resp||'')}</span>${m.desc?'<br><span class="sub">'+esc(m.desc)+'</span>':''}</div></div>`).join('')}</div>`;
   if(d){
     const comPend=new Set(v.filter(a=>stOf(a)==='pendente').map(a=>a.cid)),crit=new Set(v.filter(a=>a.sev==='crit'&&stOf(a)==='pendente').map(a=>a.cid));
     const semDest=d.cs.filter(c=>destOf(c)==='').length,propP=(S.prop||[]).filter(p=>p.status==='pendente').length;
-    h+=`<div class="cards" style="margin-top:14px"><div class="c"><b>${d.cs.length}</b><span>contratações no PCA ${ano}</span></div><div class="c"><b>R$ ${(d.cs.reduce((t,c)=>t+c.total,0)/1e6).toLocaleString('pt-BR',{maximumFractionDigits:1})} mi</b><span>valor estimado</span></div><div class="c"><b class="crit">${crit.size}</b><span>com pendência crítica</span></div><div class="c"><b>${comPend.size}</b><span>com alguma pendência</span></div><div class="c"><b>${semDest}</b><span>sem revisão definida</span></div>${Store.canWrite?`<div class="c"><b>${propP}</b><span>propostas aguardando</span></div>`:''}</div>`;
+    const rv=aRevisar(d.cs,ano),R26=ano===2026?linhas26():null,kc=ano===2026?contratados26():null;
+    const feitas=rv.filter(c=>destOf(c)!=='').length,pctR=rv.length?Math.round(feitas/rv.length*100):100;
+    const big=(n,t,cl)=>`<div class="c"><b class="${cl||''}">${n}</b><span>${t}</span></div>`;
+    const brM=v=>'R$ '+(v/1e6).toLocaleString('pt-BR',{maximumFractionDigits:1})+' mi';
+    big_=`<div class="cards big">${big(d.cs.length,'contratações no PCA '+ano)}${big(brM(d.cs.reduce((t,c)=>t+c.total,0)),'valor estimado')}${kc?big(kc.size,'já contratadas (homologadas)','ok'):''}${R26?big(R26.filter(r=>r.sit===SIT26[2]).length,'sem contratação localizada','med'):''}${R26?big(R26.filter(r=>r.tipo!=='PCA').length,'contratos sem item no PCA','med'):''}${big(crit.size,'com pendência crítica','crit')}${big(rv.length,'a revisar (não contratadas)')}${big(pctR+'%','revisão concluída ('+feitas+' de '+rv.length+')')}${Store.canWrite?big(propP,'propostas aguardando validação'):''}</div>`;
     const ar={};d.cs.forEach(c=>{const k=c.area||'(sem área)';const x=ar[k]||(ar[k]={n:0,p:0,cr:0,sd:0,t:0});x.n++;x.t+=c.total;if(comPend.has(c.id))x.p++;if(crit.has(c.id))x.cr++;if(destOf(c)==='')x.sd++;});
     h+=`<h3>O que falta por área</h3><div class="tw"><table><thead><tr><th>Área requisitante</th><th>Contratações</th><th>Com pendência</th><th>Críticas</th><th>Sem revisão</th><th></th></tr></thead><tbody>${Object.entries(ar).sort((a,b)=>b[1].p-a[1].p||b[1].t-a[1].t).map(([k,x])=>`<tr><td>${esc(k)}</td><td>${x.n}</td><td>${x.p?'<b>'+x.p+'</b>':'<span class="ok">0 ✓</span>'}</td><td>${x.cr||'0'}</td><td>${x.sd}</td><td><button class="s" data-go="${esc(k)}">Ver itens</button></td></tr>`).join('')}</tbody></table></div>`;
   }
-  return h;
+  return big_+h;
 }
 function editCal(){
   const ano=S.ano==='todos'?2026:S.ano;let M=marcosDe(ano).map(m=>({...m}));const dlg=$('#dlg');
@@ -541,10 +569,11 @@ function editCal(){
   };
   render();dlg.showModal();
 }
-function itens(){
-  const vis=S.vis||'contr',areas=[...new Set(allCsAll().map(c=>c.area).filter(Boolean))].sort();
-  return `<div class="row"><label class="sub">Visão</label><select id="vis">${VIS.map(o=>`<option value="${o[0]}" ${vis===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select>
-  ${['contr','pend','painel'].includes(vis)?`<label class="sub">Área</label><select id="farea"><option value="">Todas as áreas</option>${areas.map(a=>`<option ${S.farea===a?'selected':''}>${esc(a)}</option>`).join('')}</select>`:''}</div>`+({contr,pend,a26,cruz,pncp,painel}[vis])();
+function itens(){return contr();}
+function ger(){
+  const vis=S.vis,areas=[...new Set(allCsAll().map(c=>c.area).filter(Boolean))].sort();
+  return `<p class="sub">Painel para acompanhamento: contratação, pendências e contratos sem PCA. A revisão dos itens é feita na tela <b>Revisão</b>.</p><div class="row"><label class="sub">Visão</label><select id="vis">${GV.map(o=>`<option value="${o[0]}" ${vis===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select>
+  ${['pend','painel'].includes(vis)?`<label class="sub">Área</label><select id="farea"><option value="">Todas as áreas</option>${areas.map(a=>`<option ${S.farea===a?'selected':''}>${esc(a)}</option>`).join('')}</select>`:''}</div>`+({a26,sempca:a26,pend,painel,cruz,pncp}[vis])();
 }
 function coord(){
   const sub=S.csub||'prop',pp=(S.prop||[]).filter(p=>p.status==='pendente').length,cp=(Store.usuarios||[]).filter(u=>u.status==='pendente').length;
@@ -555,19 +584,19 @@ function coord(){
 function draw(){
   const nc=Cesta.get().length;
   const pp=(S.prop||[]).filter(p=>p.status==='pendente').length+((Store.usuarios||[]).filter(u=>u.status==='pendente').length);
-  const tabs=[['cal','Calendário'],['itens','Itens do PCA']].concat(Store.canWrite?[['coord','Coordenação'+(pp?' ('+pp+')':'')]]:[]);
-  if(!['cal','itens','coord','minhas','cfg'].includes(S.tab)||(S.tab==='coord'&&!Store.canWrite))S.tab='cal';
-  S.vis=S.vis||'contr';
-  if(S.ano==='todos'&&!(S.tab==='itens'&&['pend','contr','pncp'].includes(S.vis)))S.ano=2026;
+  const tabs=[['cal','Início'],['itens','Revisão'],['ger','Painel gerencial']].concat(Store.canWrite?[['coord','Coordenação'+(pp?' ('+pp+')':'')]]:[]);
+  if(!['cal','itens','ger','coord','minhas','cfg'].includes(S.tab)||(S.tab==='coord'&&!Store.canWrite))S.tab='cal';
+    if(!GV.some(o=>o[0]===S.vis))S.vis='a26';
+  if(S.ano==='todos'&&!(S.tab==='ger'&&['pend','pncp'].includes(S.vis)))S.ano=2026;
   const age=S.pn&&S.pn.coletado?(Date.now()-new Date(S.pn.coletado))/864e5:null;
   let h=`<header><div><h1>Plano de Contratações Anual</h1><div class="sub">Fundação Florestal · NGI coordena, NCP consolida</div></div>
-  <div class="row"><label class="sub">PCA</label><select id="ano">${[2026,2027].map(a=>`<option ${a==S.ano?'selected':''}>${a}</option>`).join('')}${S.tab==='itens'&&['pend','contr','pncp'].includes(S.vis)?`<option value="todos" ${S.ano==='todos'?'selected':''}>Todos</option>`:''}</select>
+  <div class="row"><label class="sub">PCA</label><select id="ano">${[2026,2027].map(a=>`<option ${a==S.ano?'selected':''}>${a}</option>`).join('')}${S.tab==='ger'&&['pend','pncp'].includes(S.vis)?`<option value="todos" ${S.ano==='todos'?'selected':''}>Todos</option>`:''}</select>
   ${Store.canWrite?'':`<button class="hb" data-t="minhas">Minhas propostas${nc?' ('+nc+')':''}</button>`}<button class="hb" data-t="cfg">${Store.me?esc((Store.me.name||'').split(' ')[0]||'Conta'):'Entrar'}</button></div></header>`;
   h+=`<div class="sub" style="margin:-4px 2px 10px">PNCP atualizado em ${S.pn?fmtDT(S.pn.coletado):'—'}${age!=null&&age>10?' · <b class="crit">desatualizado há '+Math.floor(age)+' dias</b>':''} <button class="s" id="rl">Recarregar</button>${Store.canWrite?'':' · suas alterações viram propostas para validação'}${S.pnMsg?' · '+esc(S.pnMsg):''}</div>`;
   if(S.msg)h+=`<div class="msg">${esc(S.msg)}</div>`;
   h+=`<nav>${tabs.map(t=>`<button data-t="${t[0]}" class="${S.tab==t[0]?'on':''}">${t[1]}</button>`).join('')}</nav>`;
-  if((S.tab==='cal'||S.tab==='itens')&&!yrs().length)h+=`<div class="box">PCA ${S.ano} ainda não está no repositório. Envie <code>pca_${S.ano}.csv</code> ao repositório e rode a rotina em Actions (ou espere a próxima execução).</div>`;
-  else h+=({cal:calend,itens,coord,minhas,cfg}[S.tab])();
+  if((S.tab==='cal'||S.tab==='itens'||S.tab==='ger')&&!yrs().length)h+=`<div class="box">PCA ${S.ano} ainda não está no repositório. Envie <code>pca_${S.ano}.csv</code> ao repositório e rode a rotina em Actions (ou espere a próxima execução).</div>`;
+  else h+=({cal:calend,itens,ger,coord,minhas,cfg}[S.tab])();
   $('#app').innerHTML=h;
   $('#ano').onchange=e=>{S.ano=e.target.value==='todos'?'todos':+e.target.value;draw();};
   document.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{S.tab=b.dataset.t;window.scrollTo(0,0);draw();});
@@ -580,7 +609,7 @@ function painel(){
   const comProb=new Set(v.map(a=>a.cid)).size;
   let h=`<div class="cards"><div class="c"><b>${d.cs.length}</b><span>contratações</span></div><div class="c"><b>${d.items.length}</b><span>itens</span></div><div class="c"><b>${brl(d.cs.reduce((s,c)=>s+c.total,0))}</b><span>valor estimado</span></div>
   <div class="c"><b class="crit">${n('crit')}</b><span>apontamentos críticos</span></div><div class="c"><b class="med">${n('med')}</b><span>médios</span></div><div class="c"><b>${comProb}</b><span>contratações com pendência</span></div></div>
-  <div class="cards">${['','manter','proximo','cancelar'].map(k=>{const x=d.cs.filter(c=>destOf(c)==k);return `<div class="c"><b>${x.length}</b><span>${DEST[k]} · ${brl(x.reduce((s,c)=>s+c.total,0))}</span></div>`}).join('')}</div>
+  <div class="cards">${['','manter','proximo','cancelar','outros'].map(k=>{const x=d.cs.filter(c=>destOf(c)==k);return `<div class="c"><b>${x.length}</b><span>${DEST[k]} · ${brl(x.reduce((s,c)=>s+c.total,0))}</span></div>`}).join('')}</div>
   <div class="box"><b>Adequação: ${pct}%</b> (${feitos} de ${v.length} apontamentos tratados)<div class="bar" style="margin-top:6px"><i style="width:${pct}%"></i></div></div>
   <div class="tw"><table><tr><th>Regra</th><th>Descrição</th><th>Gravidade</th><th>Qtd</th><th>Tratados</th></tr>`;
   Object.keys(Core.REGRAS).forEach(r=>{const x=v.filter(a=>a.regra==r);h+=`<tr><td>${r}</td><td>${Core.REGRAS[r][1]}</td><td>${sevTag(Core.REGRAS[r][0])}</td><td>${x.length||'<span class="ok">0 ✓</span>'}</td><td>${x.filter(a=>stOf(a)!='pendente').length}</td></tr>`;});
@@ -604,9 +633,20 @@ function pend(){
 }
 function contr(){
   const q=(S.q||'').toLowerCase();
-  const cs=allCs().filter(c=>(!q||(c.num+c.titulo+c.area).toLowerCase().includes(q))&&(!S.fdest||(S.fdest=='_'?destOf(c)=='':destOf(c)==S.fdest)));
+  const ano=S.ano==='todos'?2026:S.ano;
+  const cs=aRevisar(allCs(),ano).filter(c=>(!q||(c.num+c.titulo+c.area).toLowerCase().includes(q))&&(!S.fdest||(S.fdest=='_'?destOf(c)=='':destOf(c)==S.fdest)));
   const pc={};allVals().forEach(a=>{if(stOf(a)=='pendente')pc[a.cid]=(pc[a.cid]||0)+1;});
-  let h=`<div class="row"><input id="q" placeholder="Buscar nº, título ou área" value="${esc(S.q)}"><select id="fdest"><option value="">Revisão: todas</option><option value="_" ${S.fdest=='_'?'selected':''}>A definir</option><option value="manter" ${S.fdest=='manter'?'selected':''}>Manter no ano</option><option value="proximo" ${S.fdest=='proximo'?'selected':''}>Enviar ao PCA seguinte</option><option value="cancelar" ${S.fdest=='cancelar'?'selected':''}>Cancelar</option></select><span class="sub">${cs.length} contratações</span></div><div class="tw"><table><tr><th>DFD</th><th>Título</th><th>Área</th><th>Prio.</th><th>Início</th><th>Conclusão</th><th>Valor</th><th>Revisão</th><th></th></tr>`;
+  const C_=Cesta.get().filter(x=>x.ch&&x.ch.startsWith('dest|')),semJ=C_.filter(x=>(x.just||'').length<JUST_MIN).length;
+  let h=`<details class="box guia" ${S.guiaFechada?'':'open'}><summary><b>Como usar a Revisão</b> <span class="sub">(clique para abrir ou fechar)</span></summary>
+  <p class="sub"><b>Esta tela é só para revisar o que ainda não foi contratado.</b> ${ano===2026&&contratados26()?'As contratações já homologadas no PNCP não aparecem aqui (veja-as no Painel gerencial).':'Os dados do PNCP ainda não foram carregados; todos os itens são listados.'}</p>
+  <p class="sub">Para cada contratação, escolha uma opção na coluna <b>Revisão</b>. Toda escolha precisa de uma justificativa.</p>
+  <ul class="guia-l"><li><b>Manter no PCA ${ano}:</b> a contratação continua necessária e será realizada ainda neste exercício. Se mudaram datas ou dados, use <b>Adequar</b> ao lado.</li>
+  <li><b>Atualizar para o PCA ${ano+1}:</b> a necessidade continua, mas não será contratada neste exercício. O item será levado ao PCA seguinte. Informe o motivo (por exemplo, falta de instrução ou de recurso).</li>
+  <li><b>Realizado por outros fins:</b> a necessidade já foi atendida por outro meio (outro processo, outro DFD ou contrato vigente). Na justificativa, informe qual.</li>
+  <li><b>Cancelar – não é mais necessário:</b> a demanda deixou de existir. Explique por quê.</li></ul>
+  ${Store.canWrite?'':'<p class="sub"><b>Você pode revisar vários itens e enviar depois.</b> Cada escolha vira um rascunho nesta tela. Preencha a justificativa na própria linha e, ao terminar, envie tudo de uma vez pelo botão abaixo. Use o filtro de <b>Área</b> para revisar uma área por vez.</p>'}</details>
+  ${!Store.canWrite&&C_.length?`<div class="box barra"><b>${C_.length} revisão(ões) em rascunho</b>${semJ?` · <span class="crit">${semJ} sem justificativa</span>`:' · todas com justificativa'}<button class="p" data-t="minhas">Revisar e enviar à coordenação</button></div>`:''}
+  <div class="row"><label class="sub">Área</label><select id="farea"><option value="">Todas as áreas</option>${[...new Set(allCsAll().map(c=>c.area).filter(Boolean))].sort().map(a=>`<option ${S.farea===a?'selected':''}>${esc(a)}</option>`).join('')}</select><input id="q" placeholder="Buscar DFD, título ou área" value="${esc(S.q)}"><select id="fdest"><option value="">Revisão: todas</option><option value="_" ${S.fdest=='_'?'selected':''}>A definir</option><option value="manter" ${S.fdest=='manter'?'selected':''}>Manter no PCA</option><option value="proximo" ${S.fdest=='proximo'?'selected':''}>Atualizar para o PCA seguinte</option><option value="cancelar" ${S.fdest=='cancelar'?'selected':''}>Cancelar – não é mais necessário</option><option value="outros" ${S.fdest=='outros'?'selected':''}>Realizado por outros fins</option></select><span class="sub">${cs.length} contratações</span></div><div class="tw"><table><tr><th>DFD</th><th>Título</th><th>Área</th><th>Prio.</th><th>Início</th><th>Conclusão</th><th>Valor</th><th>Revisão</th><th></th></tr>`;
   cs.slice(0,600).forEach(c=>{const o=(S.ov[c.id]||{}).f||{};const ed=Object.keys(o).length;
     h+=`<tr><td>${esc(o.num||c.num)}${ed?' <span class="tag ok">editado</span>':''}</td><td>${esc(o.titulo||c.titulo)}</td><td>${esc(c.area)}</td><td>${esc(c.prioridade)}</td><td>${esc(o.ini||c.ini)}</td><td>${esc(o.fim||c.fim)}</td><td>${brl(c.total)}</td><td>${destSel(c)}</td><td><button class="s" data-ed="${esc(c.id)}">Adequar</button></td></tr>`;});
   return h+'</table></div>';
@@ -647,6 +687,8 @@ function decideVinc(key,ok){
 }
 /* ===== Análise 2026: tudo do PCA 2026 e das contratações de 2026 em uma única tela ===== */
 const SIT26=['Contratada (homologada)','Publicada, sem homologação','Sem contratação localizada','Contratada/publicada sem item no PCA'];
+const contratados26=()=>{const R=linhas26();return R?new Set(R.filter(r=>r.tipo==='PCA'&&r.sit===SIT26[0]).map(r=>r.cid)):null;};
+const aRevisar=(cs,ano)=>{if(ano!==2026)return cs;const k=contratados26();return k?cs.filter(c=>!k.has(c.id)):cs;};
 function linhas26(){
   const ds=S.ds[2026];if(!ds||!S.pn)return null;const P=S.pn.rows;const hoje=new Date();
   const cr=Core.cruzarPNCP(ds,P,S.vinc);const usados=new Set();cr.forEach(r=>r.ids.forEach(i=>usados.add(i)));
@@ -677,7 +719,7 @@ function a26(){
   return `<p class="sub">Tudo de 2026 em uma tela: os ${pca.length} itens do PCA 2026 cruzados com as contratações publicadas pela Fundação no PNCP em 2026 (coleta de ${fmtDT(S.pn.coletado)}). "Sem contratação localizada" não prova que não houve contratação: confira antes de cancelar.</p>
   <div class="cards"><div class="c"><b>${pca.length}</b><span>itens no PCA 2026 · ${brl(soma(pca,'vpca'))}</span></div><div class="c"><b>${n(SIT26[0])}</b><span>contratados (homologados) · ${brl(soma(R.filter(r=>r.sit===SIT26[0]),'vhom'))}</span></div><div class="c"><b>${n(SIT26[1])}</b><span>publicados, sem homologação</span></div><div class="c"><b>${n(SIT26[2])}</b><span>sem contratação localizada · ${brl(soma(R.filter(r=>r.sit===SIT26[2]),'vpca'))}</span></div><div class="c"><b>${n(SIT26[3])}</b><span>contratados/publicados sem PCA</span></div><div class="c"><b>${R.filter(r=>r.motivos.length).length}</b><span>precisam de decisão</span></div></div>
   <div class="row">${chip('tudo','Tudo',R.length)}${chip('contratado','Contratado',n(SIT26[0]))}${chip('sempca','Contratado sem PCA',n(SIT26[3]))}${chip('semcontr','Sem contratação',n(SIT26[2]))}${chip('atrasado','Início já passou, sem contratação',R.filter(r=>r.atras).length)}${chip('decisao','Precisa de decisão',R.filter(r=>r.motivos.length).length)}</div>
-  <div class="row">${sel('sit','Situação: todas',SIT26.map(x=>[x,x]))}${sel('dest','Revisão: todas',[['_','A definir'],['manter','Manter no ano'],['proximo','Enviar ao PCA 2027'],['cancelar','Cancelar']])}${sel('pen','Pendências: todas',[['c','Com pendência crítica'],['p','Com alguma pendência'],['0','Sem pendência']])}${sel('area','Área: todas',areas.map(x=>[x,x]))}${sel('pri','Prioridade: todas',pris.map(x=>[x,x]))}<input data-a26="q" placeholder="Buscar" value="${esc(f.q||'')}" style="min-width:180px"><button class="s" id="x26">Exportar planilha (CSV)</button><span class="sub">${L.length} linhas</span></div>
+  <div class="row">${sel('sit','Situação: todas',SIT26.map(x=>[x,x]))}${sel('dest','Revisão: todas',[['_','A definir'],['manter','Manter no PCA'],['proximo','Atualizar para o PCA seguinte'],['cancelar','Cancelar – não é mais necessário'],['outros','Realizado por outros fins']])}${sel('pen','Pendências: todas',[['c','Com pendência crítica'],['p','Com alguma pendência'],['0','Sem pendência']])}${sel('area','Área: todas',areas.map(x=>[x,x]))}${sel('pri','Prioridade: todas',pris.map(x=>[x,x]))}<input data-a26="q" placeholder="Buscar" value="${esc(f.q||'')}" style="min-width:180px"><button class="s" id="x26">Exportar planilha (CSV)</button><span class="sub">${L.length} linhas</span></div>
   <div class="tw"><table><thead><tr><th>Origem</th><th>DFD</th><th>Título / objeto</th><th>Área · prioridade</th><th>Início → conclusão previstos</th><th>Valor PCA</th><th>Situação em 2026</th><th>No PNCP</th><th>Pend.</th><th>Revisão</th><th>Precisa de</th></tr></thead><tbody>${L.slice(0,400).map(r=>`<tr><td>${r.tipo==='PCA'?'PCA':'<span class="tag med">Só PNCP</span>'}</td><td><b>${esc(r.num)}</b></td><td>${esc(r.titulo)}</td><td>${esc(r.area)}<br><span class="sub">${esc(r.pri)}</span></td><td>${esc(r.ini)}${r.ini?' → '+esc(r.fim):''}${r.atras?'<br><span class="tag crit">início passou</span>':''}</td><td>${r.tipo==='PCA'?brl(r.vpca):'—'}</td><td class="${r.sit[0]==='C'&&r.tipo==='PCA'?'ok':r.sit[0]==='P'?'med':r.tipo==='Só PNCP'?'med':''}">${r.sit}${r.conf?'<br><span class="sub">vínculo '+r.conf+'</span>':''}</td><td>${r.pubs.length?r.pubs.map(p=>`<span class="sub">${esc(p.mod)} ${esc(p.numero)}/${esc(p.ano)}</span><br>${p.hom?'homologado '+brl(p.hom):'estimado '+brl(p.est)}`).join('<hr style="border:0;border-top:1px solid var(--bd)">'):'<span class="sub">—</span>'}</td><td>${r.pen?(r.crit?`<span class="tag crit">${r.crit} crít.</span> `:'')+r.pen:'—'}</td><td>${r.tipo==='PCA'?destSel(r.c):'<span class="sub">—</span>'}${r.tipo==='PCA'?`<br><button class="s" data-ed="${esc(r.cid)}">Adequar</button>`:''}</td><td>${r.motivos.length?'<span class="sub">'+r.motivos.map(esc).join('<br>')+'</span>':'<span class="ok">—</span>'}</td></tr>`).join('')}</tbody></table></div>${L.length>400?`<p class="sub">Mostrando 400 de ${L.length}: use os filtros ou exporte a planilha.</p>`:''}`;
 }
 function x26(){
@@ -743,9 +785,10 @@ function bind(){
   document.querySelectorAll('[data-pv]').forEach(b=>b.onclick=()=>{const [i,d]=b.dataset.pv.split('|');validar(i,d);});
   const px=$('#px');if(px)px.onclick=()=>{const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';const c=['Protocolo','Recebida em','PCA','DFD','Título','Área','Proponente','Setor','E-mail','Ação','De','Para','Justificativa do proponente','Situação','Validado por','Data da validação','Comentário da validação'];save('propostas_pca.csv','\ufeff'+[c.join(';')].concat((S.prop||[]).map(p=>[p.lote,p.at,p.ano,p.ref,p.titulo,p.area,p.prop.nome,p.prop.setor,p.prop.email,p.acao,p.antes,p.depois,p.just,p.status,(p.val||{}).uid,(p.val||{}).at,(p.val||{}).coment].map(q).join(';'))).join('\n'));};
   document.querySelectorAll('[data-fm]').forEach(e=>e.oninput=()=>{(S.fm=S.fm||{})[e.dataset.fm]=e.value;});
-  const vs=$('#vis');if(vs)vs.onchange=()=>{S.vis=vs.value;draw();};const fa=$('#farea');if(fa)fa.onchange=()=>{S.farea=fa.value;draw();};
+  const vs=$('#vis');if(vs)vs.onchange=()=>{S.vis=vs.value;if(vs.value==='sempca')S.f26={...F26.sempca};else if(vs.value==='a26')S.f26={};draw();};const fa=$('#farea');if(fa)fa.onchange=()=>{S.farea=fa.value;draw();};
   document.querySelectorAll('[data-cs]').forEach(b=>b.onclick=()=>{S.csub=b.dataset.cs;draw();});
-  document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{S.farea=b.dataset.go;S.vis='contr';S.tab='itens';window.scrollTo(0,0);draw();});
+  document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{S.farea=b.dataset.go;S.tab='itens';window.scrollTo(0,0);draw();});
+  const mx=$('#mi_x');if(mx)mx.onclick=()=>xMinhas();document.querySelectorAll('[data-mx]').forEach(b=>b.onclick=()=>xMinhas(b.dataset.mx));
   const ce=$('#cal_ed');if(ce)ce.onclick=editCal;
   document.querySelectorAll('[data-modo]').forEach(b=>b.onclick=()=>{S.cfgModo=b.dataset.modo;S.msg='';draw();});
   const F_=()=>S.fm||{};
@@ -755,6 +798,9 @@ function bind(){
   document.querySelectorAll('[data-ud]').forEach(b=>b.onclick=()=>{const [i,d]=b.dataset.ud.split('|');Store.decidir(i,d);});
   const co=$('#c_out');if(co)co.onclick=()=>Store.logout();
   [['mi_n','prop_nome'],['mi_s','prop_setor'],['mi_e','prop_email']].forEach(([id,k])=>{const e=$('#'+id);if(e)e.onchange=()=>LS.set(k,e.value.trim());});
+  const salvaJ=(id,v)=>{Cesta.set(Cesta.get().map(x=>x.id===id?{...x,just:v.trim()}:x));};
+  document.querySelectorAll('[data-mj]').forEach(e=>e.onchange=()=>{salvaJ(e.dataset.mj,e.value);draw();});
+  document.querySelectorAll('[data-rj]').forEach(e=>e.onchange=()=>{const it=Cesta.get().find(x=>x.ch==='dest|'+e.dataset.rj);if(it){salvaJ(it.id,e.value);draw();}});
   document.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{Cesta.set(Cesta.get().filter(x=>x.id!==b.dataset.rm));draw();});
   const me_=$('#mi_env');if(me_)me_.onclick=()=>{[['mi_n','prop_nome'],['mi_s','prop_setor'],['mi_e','prop_email']].forEach(([id,k])=>LS.set(k,$('#'+id).value.trim()));enviarCesta();};
   ['fsev','freg','fst','pst','fdest'].forEach(k=>{const e=$('#'+k);if(e)e.onchange=()=>{S[k]=e.value;draw();};});
@@ -765,7 +811,7 @@ function bind(){
   document.querySelectorAll('[data-dest]').forEach(s=>s.onchange=()=>{const c=allCs().find(x=>x.id==s.dataset.dest);if(c)setDest(c,s.value);});
   document.querySelectorAll('[data-vc]').forEach(b=>b.onclick=()=>decideVinc(b.dataset.vc,true));
   document.querySelectorAll('[data-vd]').forEach(b=>b.onclick=()=>decideVinc(b.dataset.vd,false));
-  const e=$('#exp');if(e)e.onclick=()=>save('PCA_'+S.ano+'_adequado.csv',Core.exportCSV(cur(),ovF(),c=>{const k=destOf(c);return k!='cancelar'&&k!='proximo';}));
+  const e=$('#exp');if(e)e.onclick=()=>save('PCA_'+S.ano+'_adequado.csv',Core.exportCSV(cur(),ovF(),c=>{const k=destOf(c);return k!='cancelar'&&k!='proximo'&&k!='outros';}));
   const en=$('#expn');if(en)en.onclick=()=>save('PCA_'+S.ano+'_itens_para_'+(S.ano+1)+'.csv',Core.exportCSV(cur(),ovF(),c=>destOf(c)=='proximo'));
   const r=$('#expr');if(r)r.onclick=()=>save('Apontamentos_PCA_'+S.ano+'.csv','\uFEFFContratação;Regra;Descrição;Detalhe;Gravidade;Situação;Observação\r\n'+vals().map(a=>[a.num,a.regra,a.desc,a.det,a.sev,ST[stOf(a)],(S.aj[ajId(a.cid,a.regra)]||{}).obs||''].map(x=>String(x).replace(/;/g,',')).join(';')).join('\r\n'));
 }
