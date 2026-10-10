@@ -526,6 +526,7 @@ function sevTag(s){return `<span class="tag ${s}">${{crit:'Crítico',med:'Médio
 const ovF=()=>{const o={};Object.keys(S.ov).forEach(k=>{const f={...(S.ov[k].f||{})};delete f.num;o[k]=f;});return o;};
 const vistas=()=>{try{return JSON.parse(LS.get(kU('recusadas_vistas'))||'[]')}catch(e){return[]}};
 const recusadasNovas=()=>(S.minhas||[]).filter(x=>x.status==='recusada'&&!vistas().includes(x.id));
+const aprovadaMinha=cid=>(S.minhas||[]).some(x=>x.status==='aprovada'&&x.cid===cid&&x.ap&&x.ap.t==='dest');
 const emAnalise=cid=>(S.minhas||[]).some(x=>x.status==='pendente'&&x.cid===cid&&x.ap&&x.ap.t==='dest');
 const DEST={'':'A definir',manter:'Manter no PCA',proximo:'Atualizar para o PCA seguinte',antecipada:'Contratação antecipada',cancelar:'Cancelar – não é mais necessário',outros:'Realizado por outros fins'};
 const dLabel=(k,ano)=>k==='manter'&&ano?'Manter no PCA '+ano:k==='proximo'&&ano?'Atualizar para PCA '+(ano+1):(DEST[k]||k);
@@ -633,14 +634,14 @@ function coord(){
 function draw(){
   const nc=Cesta.get().length;
   const pp=(S.prop||[]).filter(p=>p.status==='pendente').length+((Store.usuarios||[]).filter(u=>u.status==='pendente').length);
-  const tabs=[['cal','Início'],['itens','Revisão'+(recusadasNovas().length?' ('+recusadasNovas().length+')':'')]].concat(Store.podeRevisar?[['ger','Painel gerencial']]:[]).concat(Store.canWrite?[['coord','Coordenação'+(pp?' ('+pp+')':'')]]:[]);
-  if(!['cal','itens','ger','coord','minhas','cfg'].includes(S.tab)||(S.tab==='coord'&&!Store.canWrite)||(S.tab==='ger'&&!Store.podeRevisar))S.tab='cal';
+  const tabs=[['cal','Início'],['itens','Revisão'+(recusadasNovas().length?' ('+recusadasNovas().length+')':'')]].concat(Store.podeRevisar?[['ger','Painel gerencial']]:[]).concat(Store.podeRevisar&&!Store.canWrite?[['minhas','Minhas propostas'+(nc?' ('+nc+')':'')]]:[]).concat(Store.canWrite?[['coord','Coordenação'+(pp?' ('+pp+')':'')]]:[]);
+  if(!['cal','itens','ger','coord','minhas','cfg'].includes(S.tab)||(S.tab==='coord'&&!Store.canWrite)||(S.tab==='ger'&&!Store.podeRevisar)||(S.tab==='minhas'&&!Store.podeRevisar))S.tab='cal';
     if(!GV.some(o=>o[0]===S.vis))S.vis='a26';
   if(S.ano==='todos'&&!(S.tab==='ger'&&['pend','pncp'].includes(S.vis)))S.ano=2026;
   const age=S.pn&&S.pn.coletado?(Date.now()-new Date(S.pn.coletado))/864e5:null;
   let h=`<header><div><h1>Plano de Contratações Anual</h1><div class="sub">Fundação Florestal · NGI coordena, NCP consolida</div></div>
   <div class="row"><div class="anos" role="group" aria-label="Escolha o PCA"><span class="anos-t">Escolha o PCA:</span>${[2026,2027].map(a=>`<button type="button" data-ano="${a}" class="${a==S.ano?'on':''}" aria-pressed="${a==S.ano}">PCA ${a}</button>`).join('')}${S.tab==='ger'&&['pend','pncp'].includes(S.vis)?`<button type="button" data-ano="todos" class="${S.ano==='todos'?'on':''}" aria-pressed="${S.ano==='todos'}">Todos</button>`:''}</div>
-  ${Store.canWrite?'':`<button class="hb" data-t="minhas">Minhas propostas${nc?' ('+nc+')':''}</button>`}<button class="hb" data-t="cfg">${Store.me?esc((Store.me.name||'').split(' ')[0]||'Conta'):'Entrar'}</button></div></header>`;
+  <button class="hb" data-t="cfg">${Store.me?esc((Store.me.name||'').split(' ')[0]||'Conta'):'Entrar'}</button></div></header>`;
   h+=`<div class="sub" style="margin:-4px 2px 10px">PNCP atualizado em ${S.pn?fmtDT(S.pn.coletado):'—'}${age!=null&&age>10?' · <b class="crit">desatualizado há '+Math.floor(age)+' dias</b>':''} <button class="s" id="rl">Recarregar</button>${Store.canWrite?'':' · suas alterações viram propostas para validação'}${S.pnMsg?' · '+esc(S.pnMsg):''}</div>`;
   if(S.msg&&S.tab!=='cfg')h+=`<div class="msg">${esc(S.msg)}</div>`;
   h+=`<nav>${tabs.map(t=>`<button data-t="${t[0]}" class="${S.tab==t[0]?'on':''}">${t[1]}</button>`).join('')}</nav>`;
@@ -684,7 +685,7 @@ function contr(){
   if(!Store.podeRevisar)return `<div class="box agora"><h2>Entre para iniciar a revisão</h2><p>${!Store.fb?'Sem conexão com o servidor. Tente recarregar.':Store.me?'Seu cadastro ainda <b>aguarda a aprovação do NGI</b>. Assim que for aprovado, a revisão será liberada para você.':'A revisão é feita por quem tem conta aprovada pelo NGI. Entre com seu e-mail institucional e senha, ou peça seu cadastro.'}</p>${Store.me?'':'<button class="p" data-t="cfg">Entrar ou pedir cadastro</button>'}</div>`;
   const q=(S.q||'').toLowerCase();
   const ano=S.ano==='todos'?2026:S.ano;
-  const cs=aRevisar(allCs(),ano).filter(c=>(!q||(c.num+c.titulo+c.area).toLowerCase().includes(q))&&(S.verRev||destOf(c)==='')&&(Store.canWrite||!emAnalise(c.id)));
+  const cs=aRevisar(allCs(),ano).filter(c=>(!q||(c.num+c.titulo+c.area).toLowerCase().includes(q))&&((Store.canWrite&&S.verRev)||destOf(c)==='')&&(Store.canWrite||(!emAnalise(c.id)&&!aprovadaMinha(c.id))));
   const pc={};allVals().forEach(a=>{if(stOf(a)=='pendente')pc[a.cid]=(pc[a.cid]||0)+1;});
   const C_=Cesta.get().filter(x=>x.ch&&x.ch.startsWith('dest|')),semJ=C_.filter(x=>!justOk(x)).length;
   const rec=recusadasNovas(),ana=(S.minhas||[]).filter(x=>x.status==='pendente'&&x.ap&&x.ap.t==='dest').length;
@@ -698,7 +699,7 @@ function contr(){
   <li><b>Cancelar – não é mais necessário:</b> a demanda deixou de existir. Explique por quê.</li></ul>
   ${Store.canWrite?'':'<p class="sub"><b>Você pode revisar vários itens e enviar depois.</b> Cada escolha vira um rascunho nesta tela. Preencha a justificativa na própria linha e, ao terminar, envie tudo de uma vez pelo botão abaixo. Use o filtro de <b>Área</b> para revisar uma área por vez.</p>'}</details>
   ${Store.canWrite?'':`<div class="box barra"><div><b>${cs.filter(c=>rascunho(c)).length} de ${cs.length}</b> itens revisados nesta lista<br><span class="sub">${C_.length} em rascunho${semJ?' · <span class="crit">'+semJ+' sem justificativa</span>':C_.length?' · todos com justificativa':''}. Nada é enviado até você clicar no botão ao lado.<br>${S.rascSt==='salvando'?'Guardando o rascunho no servidor…':S.rascSt==='erro'?'<span class="crit">Não consegui guardar o rascunho no servidor; ele continua neste navegador.</span>':'✓ Rascunho guardado no servidor, vinculado à sua conta.'}</span></div><button class="p" id="rv_env" ${C_.length?'':'disabled'}>Enviar revisão à coordenação (${C_.length})</button></div>`}
-  <div class="row"><label class="sub">Área</label><select id="farea"><option value="">Todas as áreas</option>${[...new Set(allCsAll().map(c=>c.area).filter(Boolean))].sort().map(a=>`<option ${S.farea===a?'selected':''}>${esc(a)}</option>`).join('')}</select><input id="q" placeholder="Buscar DFD, título ou área" value="${esc(S.q)}"><label class="sub"><input type="checkbox" id="verrev" ${S.verRev?'checked':''}> Mostrar também os já revisados e aprovados</label><span class="sub">${cs.length} contratações</span></div><div class="tw"><table><tr><th>DFD</th><th>Título</th><th>Área</th><th>Prio.</th><th>Início</th><th>Conclusão</th><th>Valor</th><th>Revisão</th></tr>`;
+  <div class="row"><label class="sub">Área</label><select id="farea"><option value="">Todas as áreas</option>${[...new Set(allCsAll().map(c=>c.area).filter(Boolean))].sort().map(a=>`<option ${S.farea===a?'selected':''}>${esc(a)}</option>`).join('')}</select><input id="q" placeholder="Buscar DFD, título ou área" value="${esc(S.q)}">${Store.canWrite?`<label class="sub"><input type="checkbox" id="verrev" ${S.verRev?'checked':''}> Mostrar também os já revisados e aprovados</label>`:''}<span class="sub">${cs.length} contratações</span></div><div class="tw"><table><tr><th>DFD</th><th>Título</th><th>Área</th><th>Prio.</th><th>Início</th><th>Conclusão</th><th>Valor</th><th>Revisão</th></tr>`;
   cs.slice(0,600).forEach(c=>{const o=(S.ov[c.id]||{}).f||{};const ed=Object.keys(o).length;
     h+=`<tr><td>${esc(o.num||c.num)}${ed?' <span class="tag ok">editado</span>':''}</td><td>${esc(o.titulo||c.titulo)}</td><td>${esc(c.area)}</td><td>${esc(c.prioridade)}</td><td>${esc(o.ini||c.ini)}</td><td>${esc(o.fim||c.fim)}</td><td>${brl(c.total)}</td><td>${destSel(c)}</td></tr>`;});
   return h+'</table></div>';
